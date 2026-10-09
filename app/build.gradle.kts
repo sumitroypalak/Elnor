@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.liquidnotes.app"
+    namespace = "com.drafto.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.liquidnotes.app"
+        applicationId = "com.drafto.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
