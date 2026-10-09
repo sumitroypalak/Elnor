@@ -2,6 +2,7 @@
 
 package com.drafto.app
 
+import android.app.Activity
 import android.content.Context
 import android.os.Bundle
 import org.json.JSONArray
@@ -10,6 +11,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -17,23 +19,39 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+
+// ---------------------------------------------------------------------------
+// ✏️ DEVELOPER INFO — change these 4 lines to your own details
+// ---------------------------------------------------------------------------
+private const val DEVELOPER_NAME = "Your Name"
+private const val DEVELOPER_ROLE = "Android Developer"
+private const val DEVELOPER_GITHUB = "https://github.com/sumitroypalak"
+private const val APP_VERSION = "1.0"
 
 data class Note(
     val id: Long,
@@ -41,6 +59,8 @@ data class Note(
     val body: String,
     val updatedAt: Long
 )
+
+// ----------------------------- Notes storage -------------------------------
 
 private fun loadNotes(context: Context): List<Note> {
     return try {
@@ -78,21 +98,61 @@ private fun saveNotes(context: Context, notes: List<Note>) {
     ).edit().putString("notes", array.toString()).apply()
 }
 
+// ----------------------------- Settings storage ----------------------------
+
+/** null = user never chose, so follow the phone's system theme. */
+private fun loadDarkOverride(context: Context): Boolean? {
+    val prefs = context.getSharedPreferences("drafto_settings", Context.MODE_PRIVATE)
+    return if (prefs.contains("dark_mode")) prefs.getBoolean("dark_mode", false) else null
+}
+
+private fun saveDarkMode(context: Context, dark: Boolean) {
+    context.getSharedPreferences("drafto_settings", Context.MODE_PRIVATE)
+        .edit().putBoolean("dark_mode", dark).apply()
+}
+
+// ----------------------------- Activity & root -----------------------------
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            DraftoTheme {
-                DraftoApp()
-            }
+            DraftoRoot()
         }
     }
 }
 
 @Composable
-fun DraftoTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val colors = if (dark) {
+fun DraftoRoot() {
+    val context = LocalContext.current
+    val systemDark = isSystemInDarkTheme()
+    var darkOverride by remember { mutableStateOf(loadDarkOverride(context)) }
+    val darkTheme = darkOverride ?: systemDark
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+
+    DraftoTheme(darkTheme = darkTheme) {
+        if (showSettings) {
+            BackHandler { showSettings = false }
+            SettingsScreen(
+                darkTheme = darkTheme,
+                onDarkThemeChange = {
+                    darkOverride = it
+                    saveDarkMode(context, it)
+                },
+                onBack = { showSettings = false }
+            )
+        } else {
+            DraftoApp(
+                dark = darkTheme,
+                onOpenSettings = { showSettings = true }
+            )
+        }
+    }
+}
+
+@Composable
+fun DraftoTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
+    val colors = if (darkTheme) {
         darkColorScheme(
             primary = Color(0xFFB9B5FF),
             primaryContainer = Color(0xFF433AA8),
@@ -119,6 +179,19 @@ fun DraftoTheme(content: @Composable () -> Unit) {
         extraLarge = RoundedCornerShape(36.dp)
     )
 
+    // Keep status/navigation bar icons readable with the in-app theme
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window
+            if (window != null) {
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !darkTheme
+                controller.isAppearanceLightNavigationBars = !darkTheme
+            }
+        }
+    }
+
     MaterialTheme(
         colorScheme = colors,
         shapes = shapes,
@@ -126,15 +199,16 @@ fun DraftoTheme(content: @Composable () -> Unit) {
     )
 }
 
+// ----------------------------- Notes screen --------------------------------
+
 @Composable
-fun DraftoApp() {
+fun DraftoApp(dark: Boolean, onOpenSettings: () -> Unit) {
     val context = LocalContext.current
     var notes by remember { mutableStateOf(loadNotes(context)) }
     var search by remember { mutableStateOf("") }
     var editorOpen by remember { mutableStateOf(false) }
     var editingNote by remember { mutableStateOf<Note?>(null) }
 
-    val dark = isSystemInDarkTheme()
     val bgColor = MaterialTheme.colorScheme.background
     val cardColors = listOf(
         Color(0xFFE9E5FF),
@@ -168,21 +242,11 @@ fun DraftoApp() {
                     Text("Drafto", fontWeight = FontWeight.Bold)
                 },
                 actions = {
-                    Box(
-                        modifier = Modifier
-                            .padding(end = 12.dp)
-                            .size(48.dp)
-                            .background(
-                                MaterialTheme.colorScheme.primaryContainer,
-                                RoundedCornerShape(18.dp)
-                            ),
-                        contentAlignment = Alignment.Center
+                    FilledTonalIconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.padding(end = 8.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -427,4 +491,163 @@ fun DraftoApp() {
             }
         )
     }
+}
+
+// ----------------------------- Settings screen -----------------------------
+
+@Composable
+fun SettingsScreen(
+    darkTheme: Boolean,
+    onDarkThemeChange: (Boolean) -> Unit,
+    onBack: () -> Unit
+) {
+    val uriHandler = LocalUriHandler.current
+    val bgColor = MaterialTheme.colorScheme.background
+
+    Scaffold(
+        containerColor = bgColor,
+        topBar = {
+            TopAppBar(
+                title = { Text("Settings", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+        ) {
+            // ---- Appearance ----
+            SectionLabel("Appearance")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Dark mode",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            if (darkTheme) "Dark theme is on" else "Light theme is on",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        )
+                    }
+                    Switch(
+                        checked = darkTheme,
+                        onCheckedChange = onDarkThemeChange
+                    )
+                }
+            }
+
+            // ---- About developer ----
+            SectionLabel("About developer")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(76.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            DEVELOPER_NAME.first().uppercase(),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        DEVELOPER_NAME,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        DEVELOPER_ROLE,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "Drafto is a simple, beautiful note-taking app built with Kotlin and Jetpack Compose.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+
+                    Spacer(Modifier.height(18.dp))
+                    FilledTonalButton(
+                        onClick = { uriHandler.openUri(DEVELOPER_GITHUB) }
+                    ) {
+                        Text("View on GitHub")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Drafto v$APP_VERSION",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp)
+    )
 }
