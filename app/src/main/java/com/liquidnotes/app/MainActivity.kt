@@ -1,4 +1,3 @@
-
 package com.liquidnotes.app
 
 import android.content.Context
@@ -166,7 +165,7 @@ fun LiquidNotesApp() {
                     )
                     Spacer(Modifier.height(5.dp))
                     Text(
-                        "LiquidNotes",
+                        "Drafto",
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
