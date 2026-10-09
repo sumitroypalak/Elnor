@@ -36,7 +36,7 @@ data class Note(
 private fun loadNotes(context: Context): List<Note> {
     return try {
         val raw = context.getSharedPreferences(
-            "liquid_notes", Context.MODE_PRIVATE
+            "drafto_notes", Context.MODE_PRIVATE
         ).getString("notes", "[]") ?: "[]"
 
         val array = JSONArray(raw)
@@ -65,7 +65,7 @@ private fun saveNotes(context: Context, notes: List<Note>) {
         })
     }
     context.getSharedPreferences(
-        "liquid_notes", Context.MODE_PRIVATE
+        "drafto_notes", Context.MODE_PRIVATE
     ).edit().putString("notes", array.toString()).apply()
 }
 
@@ -73,15 +73,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            LiquidNotesTheme {
-                LiquidNotesApp()
+            DraftoTheme {
+                DraftoApp()
             }
         }
     }
 }
 
 @Composable
-fun LiquidNotesTheme(content: @Composable () -> Unit) {
+fun DraftoTheme(content: @Composable () -> Unit) {
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
     val colors = if (dark) {
         darkColorScheme(
@@ -101,7 +101,7 @@ fun LiquidNotesTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun LiquidNotesApp() {
+fun DraftoApp() {
     val context = LocalContext.current
     var notes by remember { mutableStateOf(loadNotes(context)) }
     var search by remember { mutableStateOf("") }
