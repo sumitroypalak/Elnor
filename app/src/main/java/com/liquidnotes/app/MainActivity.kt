@@ -1,8 +1,6 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package com.drafto.app
-
-
 
 import android.content.Context
 import android.os.Bundle
@@ -20,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
@@ -111,10 +110,18 @@ fun DraftoTheme(content: @Composable () -> Unit) {
         )
     }
 
-    // Expressive theme + spring-based expressive motion
-    MaterialExpressiveTheme(
+    // Large, rounded shapes in the Material 3 Expressive style
+    val shapes = Shapes(
+        extraSmall = RoundedCornerShape(8.dp),
+        small = RoundedCornerShape(14.dp),
+        medium = RoundedCornerShape(20.dp),
+        large = RoundedCornerShape(28.dp),
+        extraLarge = RoundedCornerShape(36.dp)
+    )
+
+    MaterialTheme(
         colorScheme = colors,
-        motionScheme = MotionScheme.expressive(),
+        shapes = shapes,
         content = content
     )
 }
@@ -156,12 +163,9 @@ fun DraftoApp() {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = bgColor,
         topBar = {
-            LargeFlexibleTopAppBar(
+            LargeTopAppBar(
                 title = {
                     Text("Drafto", fontWeight = FontWeight.Bold)
-                },
-                subtitle = {
-                    Text("Your thoughts, beautifully organized.")
                 },
                 actions = {
                     Box(
@@ -170,7 +174,7 @@ fun DraftoApp() {
                             .size(48.dp)
                             .background(
                                 MaterialTheme.colorScheme.primaryContainer,
-                                MaterialShapes.Cookie9Sided.toShape()
+                                RoundedCornerShape(18.dp)
                             ),
                         contentAlignment = Alignment.Center
                     ) {
@@ -208,7 +212,13 @@ fun DraftoApp() {
                 .padding(padding)
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(Modifier.height(8.dp))
+            Text(
+                "Your thoughts, beautifully organized.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+            )
+
+            Spacer(Modifier.height(16.dp))
 
             OutlinedTextField(
                 value = search,
