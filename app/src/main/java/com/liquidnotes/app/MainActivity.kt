@@ -69,6 +69,42 @@ data class Note(
     val updatedAt: Long
 )
 
+private const val UNTITLED_NOTE = "নামহীন নোট"
+
+/**
+ * Name shown in the notes list. Calculated every time the list is drawn
+ * and never saved, so it follows the text when the note is edited.
+ *
+ * 1. User's Title, if it has any text
+ * 2. otherwise the first line of the body that has text
+ * 3. otherwise "নামহীন নোট"
+ */
+fun getDisplayTitle(note: Note): String {
+    val title = note.title.trim()
+    if (title.isNotEmpty()) return title
+
+    val firstLine = note.body
+        .lineSequence()
+        .map { it.trim() }
+        .firstOrNull { it.isNotEmpty() }
+
+    return firstLine ?: UNTITLED_NOTE
+}
+
+/**
+ * Preview text shown under the name. When the first line is already used
+ * as the name, it is skipped here so it does not appear twice.
+ */
+fun getPreviewBody(note: Note): String {
+    if (note.title.isNotBlank()) return note.body.trim()
+
+    val lines = note.body.lines()
+    val firstIndex = lines.indexOfFirst { it.isNotBlank() }
+    if (firstIndex == -1) return ""
+
+    return lines.drop(firstIndex + 1).joinToString("\n").trim()
+}
+
 // ----------------------------- Notes storage -------------------------------
 
 private fun loadNotes(context: Context): List<Note> {
@@ -414,7 +450,7 @@ fun DraftoApp(dark: Boolean, onOpenSettings: () -> Unit) {
                             ) {
                                 Column(Modifier.padding(20.dp)) {
                                     Text(
-                                        note.title.ifBlank { "Untitled note" },
+                                        getDisplayTitle(note),
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
                                         color = if (dark) MaterialTheme.colorScheme.onSurface
@@ -422,10 +458,11 @@ fun DraftoApp(dark: Boolean, onOpenSettings: () -> Unit) {
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    if (note.body.isNotBlank()) {
+                                    val preview = getPreviewBody(note)
+                                    if (preview.isNotEmpty()) {
                                         Spacer(Modifier.height(8.dp))
                                         Text(
-                                            note.body,
+                                            preview,
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                                             else Color(0xFF454559),
