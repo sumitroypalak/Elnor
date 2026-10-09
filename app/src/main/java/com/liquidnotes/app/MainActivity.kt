@@ -13,6 +13,7 @@ import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -20,12 +21,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -33,12 +37,17 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,6 +125,7 @@ private fun saveDarkMode(context: Context, dark: Boolean) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
             DraftoRoot()
         }
@@ -206,8 +216,9 @@ fun DraftoApp(dark: Boolean, onOpenSettings: () -> Unit) {
     val context = LocalContext.current
     var notes by remember { mutableStateOf(loadNotes(context)) }
     var search by remember { mutableStateOf("") }
-    var editorOpen by remember { mutableStateOf(false) }
-    var editingNote by remember { mutableStateOf<Note?>(null) }
+    var editorOpen by rememberSaveable { mutableStateOf(false) }
+    var editingNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val editingNote = notes.firstOrNull { it.id == editingNoteId }
 
     val bgColor = MaterialTheme.colorScheme.background
     val cardColors = listOf(
@@ -233,177 +244,206 @@ fun DraftoApp(dark: Boolean, onOpenSettings: () -> Unit) {
         saveNotes(context, notes)
     }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = bgColor,
-        topBar = {
-            LargeTopAppBar(
-                title = {
-                    Text("Drafto", fontWeight = FontWeight.Bold)
-                },
-                actions = {
-                    FilledTonalIconButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = bgColor,
-                    scrolledContainerColor = bgColor
-                ),
-                scrollBehavior = scrollBehavior
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    editingNote = null
-                    editorOpen = true
-                },
-                expanded = fabExpanded,
-                icon = { Icon(Icons.Default.Add, contentDescription = "New note") },
-                text = { Text("New note") },
-                shape = MaterialTheme.shapes.extraLarge
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(bgColor)
-                .padding(padding)
-                .padding(horizontal = 20.dp)
-        ) {
-            Text(
-                "Your thoughts, beautifully organized.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = search,
-                onValueChange = { search = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search your notes...") },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null)
-                },
-                singleLine = true,
-                shape = CircleShape
-            )
-
-            Spacer(Modifier.height(24.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Your notes",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.weight(1f)
+    if (editorOpen) {
+        EditorScreen(
+            note = editingNote,
+            onSave = { newTitle, newBody ->
+                val now = System.currentTimeMillis()
+                val id = editingNote?.id ?: now
+                val saved = Note(
+                    id = id,
+                    title = newTitle,
+                    body = newBody,
+                    updatedAt = now
                 )
-                Text(
-                    "${notes.size} notes",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
+                val newList = if (editingNote == null) {
+                    notes + saved
+                } else {
+                    notes.map { if (it.id == id) saved else it }
+                }
+                updateNotes(newList)
+            },
+            onDelete = {
+                editingNote?.let { current ->
+                    updateNotes(notes.filter { it.id != current.id })
+                }
+                editorOpen = false
+            },
+            onClose = { editorOpen = false }
+        )
+    } else {
+        Scaffold(
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            containerColor = bgColor,
+            topBar = {
+                LargeTopAppBar(
+                    title = {
+                        Text("Drafto", fontWeight = FontWeight.Bold)
+                    },
+                    actions = {
+                        FilledTonalIconButton(
+                            onClick = onOpenSettings,
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = bgColor,
+                        scrolledContainerColor = bgColor
+                    ),
+                    scrollBehavior = scrollBehavior
+                )
+            },
+            floatingActionButton = {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        editingNoteId = null
+                        editorOpen = true
+                    },
+                    expanded = fabExpanded,
+                    icon = { Icon(Icons.Default.Add, contentDescription = "New note") },
+                    text = { Text("New note") },
+                    shape = MaterialTheme.shapes.extraLarge
                 )
             }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(bgColor)
+                    .padding(padding)
+                    .padding(horizontal = 20.dp)
+            ) {
+                Text(
+                    "Your thoughts, beautifully organized.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+                )
 
-            Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(16.dp))
 
-            if (visibleNotes.isEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = { search = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search your notes...") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null)
+                    },
+                    singleLine = true,
+                    shape = CircleShape
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("📝", fontSize = 54.sp)
-                    Spacer(Modifier.height(14.dp))
                     Text(
-                        if (search.isBlank()) "Your space is empty"
-                        else "No notes found",
+                        "Your notes",
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f)
                     )
-                    Spacer(Modifier.height(8.dp))
                     Text(
-                        if (search.isBlank())
-                            "Tap + to capture your first thought."
-                        else "Try searching with another word.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+                        "${notes.size} notes",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(13.dp),
-                    contentPadding = PaddingValues(bottom = 100.dp)
-                ) {
-                    items(visibleNotes, key = { it.id }) { note ->
-                        val originalIndex = notes.indexOfFirst { it.id == note.id }
-                        val cardColor = if (dark) {
-                            MaterialTheme.colorScheme.surface
-                        } else {
-                            cardColors[(originalIndex.coerceAtLeast(0)) % cardColors.size]
-                        }
 
-                        Card(
-                            onClick = {
-                                editingNote = note
-                                editorOpen = true
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.extraLarge,
-                            colors = CardDefaults.cardColors(
-                                containerColor = cardColor
-                            ),
-                            elevation = CardDefaults.cardElevation(
-                                defaultElevation = 0.dp
-                            )
-                        ) {
-                            Column(Modifier.padding(20.dp)) {
-                                Text(
-                                    note.title.ifBlank { "Untitled note" },
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (dark) MaterialTheme.colorScheme.onSurface
-                                    else Color(0xFF24243A),
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
+                Spacer(Modifier.height(14.dp))
+
+                if (visibleNotes.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text("📝", fontSize = 54.sp)
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            if (search.isBlank()) "Your space is empty"
+                            else "No notes found",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            if (search.isBlank())
+                                "Tap + to capture your first thought."
+                            else "Try searching with another word.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(13.dp),
+                        contentPadding = PaddingValues(bottom = 100.dp)
+                    ) {
+                        items(visibleNotes, key = { it.id }) { note ->
+                            val originalIndex = notes.indexOfFirst { it.id == note.id }
+                            val cardColor = if (dark) {
+                                MaterialTheme.colorScheme.surface
+                            } else {
+                                cardColors[(originalIndex.coerceAtLeast(0)) % cardColors.size]
+                            }
+
+                            Card(
+                                onClick = {
+                                    editingNoteId = note.id
+                                    editorOpen = true
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = MaterialTheme.shapes.extraLarge,
+                                colors = CardDefaults.cardColors(
+                                    containerColor = cardColor
+                                ),
+                                elevation = CardDefaults.cardElevation(
+                                    defaultElevation = 0.dp
                                 )
-                                if (note.body.isNotBlank()) {
-                                    Spacer(Modifier.height(8.dp))
+                            ) {
+                                Column(Modifier.padding(20.dp)) {
                                     Text(
-                                        note.body,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                                        else Color(0xFF454559),
-                                        maxLines = 3,
+                                        note.title.ifBlank { "Untitled note" },
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (dark) MaterialTheme.colorScheme.onSurface
+                                        else Color(0xFF24243A),
+                                        maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                    if (note.body.isNotBlank()) {
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            note.body,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                            else Color(0xFF454559),
+                                            maxLines = 3,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Spacer(Modifier.height(14.dp))
+                                    Text(
+                                        SimpleDateFormat(
+                                            "dd MMM yyyy · hh:mm a",
+                                            Locale.getDefault()
+                                        ).format(Date(note.updatedAt)),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                        else Color(0xFF626278)
+                                    )
                                 }
-                                Spacer(Modifier.height(14.dp))
-                                Text(
-                                    SimpleDateFormat(
-                                        "dd MMM yyyy · hh:mm a",
-                                        Locale.getDefault()
-                                    ).format(Date(note.updatedAt)),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                                    else Color(0xFF626278)
-                                )
                             }
                         }
                     }
@@ -411,82 +451,154 @@ fun DraftoApp(dark: Boolean, onOpenSettings: () -> Unit) {
             }
         }
     }
+}
 
-    if (editorOpen) {
-        var title by remember(editingNote?.id) {
-            mutableStateOf(editingNote?.title ?: "")
-        }
-        var body by remember(editingNote?.id) {
-            mutableStateOf(editingNote?.body ?: "")
-        }
+// ----------------------------- Editor screen -------------------------------
 
-        AlertDialog(
-            onDismissRequest = { editorOpen = false },
-            title = {
-                Text(
-                    if (editingNote == null) "New note" else "Edit note",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("Title") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = body,
-                        onValueChange = { body = it },
-                        label = { Text("Write your thoughts...") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 130.dp),
-                        minLines = 4
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    enabled = title.isNotBlank() || body.isNotBlank(),
-                    onClick = {
-                        val now = System.currentTimeMillis()
-                        val id = editingNote?.id ?: now
-                        val updated = Note(
-                            id = id,
-                            title = title.trim(),
-                            body = body.trim(),
-                            updatedAt = now
+@Composable
+fun EditorScreen(
+    note: Note?,
+    onSave: (title: String, body: String) -> Unit,
+    onDelete: () -> Unit,
+    onClose: () -> Unit
+) {
+    val bgColor = MaterialTheme.colorScheme.background
+    val noteKey = note?.id ?: -1L
+
+    var title by rememberSaveable(noteKey) { mutableStateOf(note?.title ?: "") }
+    var bodyValue by rememberSaveable(noteKey, stateSaver = TextFieldValue.Saver) {
+        val text = note?.body ?: ""
+        // cursor starts at the end of the existing text
+        mutableStateOf(TextFieldValue(text, TextRange(text.length)))
+    }
+    var confirmDelete by remember { mutableStateOf(false) }
+    val bodyFocus = remember { FocusRequester() }
+
+    // Open the keyboard as soon as the page opens
+    LaunchedEffect(Unit) {
+        runCatching { bodyFocus.requestFocus() }
+    }
+
+    fun saveAndClose() {
+        val t = title.trim()
+        val b = bodyValue.text.trim()
+        val hasContent = t.isNotEmpty() || b.isNotEmpty()
+        val changed = note == null || t != note.title || b != note.body
+        if (hasContent && changed) onSave(t, b)
+        onClose()
+    }
+
+    // Phone's Back button / gesture also saves
+    BackHandler { saveAndClose() }
+
+    val fieldColors = TextFieldDefaults.colors(
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent,
+        disabledContainerColor = Color.Transparent,
+        focusedIndicatorColor = Color.Transparent,
+        unfocusedIndicatorColor = Color.Transparent,
+        disabledIndicatorColor = Color.Transparent
+    )
+
+    Scaffold(
+        containerColor = bgColor,
+        topBar = {
+            TopAppBar(
+                title = {},
+                navigationIcon = {
+                    IconButton(onClick = { saveAndClose() }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Save and go back"
                         )
-                        val newList = if (editingNote == null) {
-                            notes + updated
-                        } else {
-                            notes.map { if (it.id == id) updated else it }
+                    }
+                },
+                actions = {
+                    if (note != null) {
+                        IconButton(onClick = { confirmDelete = true }) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Delete note",
+                                tint = MaterialTheme.colorScheme.error
+                            )
                         }
-                        updateNotes(newList)
-                        editorOpen = false
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding() // keeps the text above the keyboard
+                .padding(horizontal = 8.dp)
+        ) {
+            // Title (optional)
+            TextField(
+                value = title,
+                onValueChange = { title = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                placeholder = {
+                    Text(
+                        "Title",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                    )
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(
+                    onNext = { bodyFocus.requestFocus() }
+                ),
+                colors = fieldColors
+            )
+
+            // Body: fills the rest of the screen
+            TextField(
+                value = bodyValue,
+                onValueChange = { bodyValue = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .focusRequester(bodyFocus),
+                textStyle = MaterialTheme.typography.bodyLarge,
+                placeholder = {
+                    Text(
+                        "Start writing...",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                    )
+                },
+                colors = fieldColors
+            )
+        }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete note?", fontWeight = FontWeight.Bold) },
+            text = { Text("This note will be permanently deleted.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        onDelete()
                     }
                 ) {
-                    Text("Save")
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (editingNote != null) {
-                        TextButton(
-                            onClick = {
-                                updateNotes(notes.filter { it.id != editingNote!!.id })
-                                editorOpen = false
-                            }
-                        ) {
-                            Text("Delete", color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                    TextButton(onClick = { editorOpen = false }) {
-                        Text("Cancel")
-                    }
+                TextButton(onClick = { confirmDelete = false }) {
+                    Text("Cancel")
                 }
             }
         )
