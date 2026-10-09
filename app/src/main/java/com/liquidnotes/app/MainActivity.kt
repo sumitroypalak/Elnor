@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+
 package com.drafto.app
 
 import android.content.Context
@@ -10,16 +12,22 @@ import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,22 +90,31 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun DraftoTheme(content: @Composable () -> Unit) {
-    val dark = androidx.compose.foundation.isSystemInDarkTheme()
+    val dark = isSystemInDarkTheme()
     val colors = if (dark) {
         darkColorScheme(
             primary = Color(0xFFB9B5FF),
+            primaryContainer = Color(0xFF433AA8),
+            onPrimaryContainer = Color(0xFFE4E0FF),
             background = Color(0xFF10111B),
             surface = Color(0xFF1C1D2B)
         )
     } else {
         lightColorScheme(
             primary = Color(0xFF6257D9),
+            primaryContainer = Color(0xFFE4E0FF),
+            onPrimaryContainer = Color(0xFF1B1464),
             background = Color(0xFFF5F5FC),
             surface = Color(0xFFFFFFFF)
         )
     }
 
-    MaterialTheme(colorScheme = colors, content = content)
+    // Expressive theme + spring-based expressive motion
+    MaterialExpressiveTheme(
+        colorScheme = colors,
+        motionScheme = MotionScheme.expressive(),
+        content = content
+    )
 }
 
 @Composable
@@ -108,8 +125,8 @@ fun DraftoApp() {
     var editorOpen by remember { mutableStateOf(false) }
     var editingNote by remember { mutableStateOf<Note?>(null) }
 
-    val dark = androidx.compose.foundation.isSystemInDarkTheme()
-    val background = MaterialTheme.colorScheme.background
+    val dark = isSystemInDarkTheme()
+    val bgColor = MaterialTheme.colorScheme.background
     val cardColors = listOf(
         Color(0xFFE9E5FF),
         Color(0xFFDDF4F0),
@@ -121,86 +138,86 @@ fun DraftoApp() {
             it.body.contains(search, true)
     }
 
+    val listState = rememberLazyListState()
+    // FAB shrinks to an icon while the list is scrolled
+    val fabExpanded by remember {
+        derivedStateOf { listState.firstVisibleItemIndex == 0 }
+    }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
     fun updateNotes(updated: List<Note>) {
         notes = updated.sortedByDescending { it.updatedAt }
         saveNotes(context, notes)
     }
 
     Scaffold(
-        containerColor = background,
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = bgColor,
+        topBar = {
+            LargeFlexibleTopAppBar(
+                title = {
+                    Text("Drafto", fontWeight = FontWeight.Bold)
+                },
+                subtitle = {
+                    Text("Your thoughts, beautifully organized.")
+                },
+                actions = {
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 12.dp)
+                            .size(48.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                MaterialShapes.Cookie9Sided.toShape()
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = bgColor,
+                    scrolledContainerColor = bgColor
+                ),
+                scrollBehavior = scrollBehavior
+            )
+        },
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = {
                     editingNote = null
                     editorOpen = true
                 },
-                shape = RoundedCornerShape(20.dp),
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Text("+", fontSize = 32.sp)
-            }
+                expanded = fabExpanded,
+                icon = { Icon(Icons.Default.Add, contentDescription = "New note") },
+                text = { Text("New note") },
+                shape = MaterialTheme.shapes.extraLarge
+            )
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(background)
+                .background(bgColor)
                 .padding(padding)
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(Modifier.height(24.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "YOUR SPACE",
-                        fontSize = 11.sp,
-                        letterSpacing = 3.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(5.dp))
-                    Text(
-                        "Drafto",
-                        fontSize = 30.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.13f),
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("✎", fontSize = 25.sp)
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "Your thoughts, beautifully organized.",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
-            )
-
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(8.dp))
 
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Search your notes...") },
-                leadingIcon = { Text("⌕", fontSize = 25.sp) },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                },
                 singleLine = true,
-                shape = RoundedCornerShape(18.dp)
+                shape = CircleShape
             )
 
             Spacer(Modifier.height(24.dp))
@@ -211,15 +228,15 @@ fun DraftoApp() {
             ) {
                 Text(
                     "Your notes",
-                    fontSize = 21.sp,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
                     "${notes.size} notes",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 13.sp
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
@@ -238,7 +255,7 @@ fun DraftoApp() {
                     Text(
                         if (search.isBlank()) "Your space is empty"
                         else "No notes found",
-                        fontSize = 19.sp,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onBackground
                     )
@@ -247,12 +264,13 @@ fun DraftoApp() {
                         if (search.isBlank())
                             "Tap + to capture your first thought."
                         else "Try searching with another word.",
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
                     )
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(13.dp),
                     contentPadding = PaddingValues(bottom = 100.dp)
@@ -271,7 +289,7 @@ fun DraftoApp() {
                                 editorOpen = true
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(23.dp),
+                            shape = MaterialTheme.shapes.extraLarge,
                             colors = CardDefaults.cardColors(
                                 containerColor = cardColor
                             ),
@@ -279,10 +297,10 @@ fun DraftoApp() {
                                 defaultElevation = 0.dp
                             )
                         ) {
-                            Column(Modifier.padding(18.dp)) {
+                            Column(Modifier.padding(20.dp)) {
                                 Text(
                                     note.title.ifBlank { "Untitled note" },
-                                    fontSize = 18.sp,
+                                    style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
                                     color = if (dark) MaterialTheme.colorScheme.onSurface
                                     else Color(0xFF24243A),
@@ -293,8 +311,7 @@ fun DraftoApp() {
                                     Spacer(Modifier.height(8.dp))
                                     Text(
                                         note.body,
-                                        fontSize = 14.sp,
-                                        lineHeight = 21.sp,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                                         else Color(0xFF454559),
                                         maxLines = 3,
@@ -307,7 +324,7 @@ fun DraftoApp() {
                                         "dd MMM yyyy · hh:mm a",
                                         Locale.getDefault()
                                     ).format(Date(note.updatedAt)),
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                                     else Color(0xFF626278)
                                 )
@@ -356,7 +373,7 @@ fun DraftoApp() {
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     enabled = title.isNotBlank() || body.isNotBlank(),
                     onClick = {
                         val now = System.currentTimeMillis()
