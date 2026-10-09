@@ -1,4 +1,4 @@
-package com.liquidnotes.app
+package com.drafto.app
 
 import android.content.Context
 import android.os.Bundle
