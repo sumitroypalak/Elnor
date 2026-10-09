@@ -57,8 +57,8 @@ import androidx.core.view.WindowCompat
 // ---------------------------------------------------------------------------
 // ✏️ DEVELOPER INFO — change these 4 lines to your own details
 // ---------------------------------------------------------------------------
-private const val DEVELOPER_NAME = "Your Name"
-private const val DEVELOPER_ROLE = "Android Developer"
+private const val DEVELOPER_NAME = "Sumit Roy"
+private const val DEVELOPER_ROLE = "Email: sumitroypalak@gmail.com"
 private const val DEVELOPER_GITHUB = "https://github.com/sumitroypalak"
 private const val APP_VERSION = "1.0"
 
