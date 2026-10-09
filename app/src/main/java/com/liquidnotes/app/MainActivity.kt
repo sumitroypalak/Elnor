@@ -69,7 +69,7 @@ data class Note(
     val updatedAt: Long
 )
 
-private const val UNTITLED_NOTE = "নামহীন নোট"
+private const val UNTITLED_NOTE = "Untitled note"
 
 /**
  * Name shown in the notes list. Calculated every time the list is drawn
@@ -77,7 +77,7 @@ private const val UNTITLED_NOTE = "নামহীন নোট"
  *
  * 1. User's Title, if it has any text
  * 2. otherwise the first line of the body that has text
- * 3. otherwise "নামহীন নোট"
+ * 3. otherwise "Untitled note"
  */
 fun getDisplayTitle(note: Note): String {
     val title = note.title.trim()
