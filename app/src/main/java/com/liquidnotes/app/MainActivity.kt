@@ -5,8 +5,6 @@ package com.drafto.app
 import android.app.Activity
 import android.content.Context
 import android.os.Bundle
-import org.json.JSONArray
-import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -14,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -53,6 +52,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 // ---------------------------------------------------------------------------
 // ✏️ DEVELOPER INFO — change these 4 lines to your own details
@@ -105,44 +106,6 @@ fun getPreviewBody(note: Note): String {
     return lines.drop(firstIndex + 1).joinToString("\n").trim()
 }
 
-// ----------------------------- Notes storage -------------------------------
-
-private fun loadNotes(context: Context): List<Note> {
-    return try {
-        val raw = context.getSharedPreferences(
-            "drafto_notes", Context.MODE_PRIVATE
-        ).getString("notes", "[]") ?: "[]"
-
-        val array = JSONArray(raw)
-        List(array.length()) { i ->
-            val obj = array.getJSONObject(i)
-            Note(
-                id = obj.getLong("id"),
-                title = obj.getString("title"),
-                body = obj.getString("body"),
-                updatedAt = obj.getLong("updatedAt")
-            )
-        }.sortedByDescending { it.updatedAt }
-    } catch (_: Exception) {
-        emptyList()
-    }
-}
-
-private fun saveNotes(context: Context, notes: List<Note>) {
-    val array = JSONArray()
-    notes.forEach { note ->
-        array.put(JSONObject().apply {
-            put("id", note.id)
-            put("title", note.title)
-            put("body", note.body)
-            put("updatedAt", note.updatedAt)
-        })
-    }
-    context.getSharedPreferences(
-        "drafto_notes", Context.MODE_PRIVATE
-    ).edit().putString("notes", array.toString()).apply()
-}
-
 // ----------------------------- Settings storage ----------------------------
 
 /** null = user never chose, so follow the phone's system theme. */
@@ -159,17 +122,32 @@ private fun saveDarkMode(context: Context, dark: Boolean) {
 // ----------------------------- Activity & root -----------------------------
 
 class MainActivity : ComponentActivity() {
+
+    // One editor ViewModel for the whole activity. It survives screen rotation.
+    private val editorViewModel: NoteEditorViewModel by viewModels {
+        NoteEditorViewModel.factory(applicationContext)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Auto-save when the app goes to the background (Lifecycle ON_STOP)
+        lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_STOP) editorViewModel.onStop()
+            }
+        )
+
+        val repository = PrefsNoteRepository.get(applicationContext)
         setContent {
-            DraftoRoot()
+            DraftoRoot(repository = repository, editorViewModel = editorViewModel)
         }
     }
 }
 
 @Composable
-fun DraftoRoot() {
+fun DraftoRoot(repository: NoteRepository, editorViewModel: NoteEditorViewModel) {
     val context = LocalContext.current
     val systemDark = isSystemInDarkTheme()
     var darkOverride by remember { mutableStateOf(loadDarkOverride(context)) }
@@ -190,6 +168,8 @@ fun DraftoRoot() {
         } else {
             DraftoApp(
                 dark = darkTheme,
+                repository = repository,
+                editorViewModel = editorViewModel,
                 onOpenSettings = { showSettings = true }
             )
         }
@@ -248,9 +228,14 @@ fun DraftoTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
 // ----------------------------- Notes screen --------------------------------
 
 @Composable
-fun DraftoApp(dark: Boolean, onOpenSettings: () -> Unit) {
-    val context = LocalContext.current
-    var notes by remember { mutableStateOf(loadNotes(context)) }
+fun DraftoApp(
+    dark: Boolean,
+    repository: NoteRepository,
+    editorViewModel: NoteEditorViewModel,
+    onOpenSettings: () -> Unit
+) {
+    // The list follows the repository, so it updates by itself after every auto-save
+    val notes by repository.notes.collectAsState()
     var search by remember { mutableStateOf("") }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var editingNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -275,36 +260,10 @@ fun DraftoApp(dark: Boolean, onOpenSettings: () -> Unit) {
     }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-    fun updateNotes(updated: List<Note>) {
-        notes = updated.sortedByDescending { it.updatedAt }
-        saveNotes(context, notes)
-    }
-
     if (editorOpen) {
         EditorScreen(
             note = editingNote,
-            onSave = { newTitle, newBody ->
-                val now = System.currentTimeMillis()
-                val id = editingNote?.id ?: now
-                val saved = Note(
-                    id = id,
-                    title = newTitle,
-                    body = newBody,
-                    updatedAt = now
-                )
-                val newList = if (editingNote == null) {
-                    notes + saved
-                } else {
-                    notes.map { if (it.id == id) saved else it }
-                }
-                updateNotes(newList)
-            },
-            onDelete = {
-                editingNote?.let { current ->
-                    updateNotes(notes.filter { it.id != current.id })
-                }
-                editorOpen = false
-            },
+            viewModel = editorViewModel,
             onClose = { editorOpen = false }
         )
     } else {
@@ -495,8 +454,7 @@ fun DraftoApp(dark: Boolean, onOpenSettings: () -> Unit) {
 @Composable
 fun EditorScreen(
     note: Note?,
-    onSave: (title: String, body: String) -> Unit,
-    onDelete: () -> Unit,
+    viewModel: NoteEditorViewModel,
     onClose: () -> Unit
 ) {
     val bgColor = MaterialTheme.colorScheme.background
@@ -511,21 +469,29 @@ fun EditorScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     val bodyFocus = remember { FocusRequester() }
 
+    // The delete button is only shown when the note exists in storage
+    val canDelete by viewModel.hasSavedNote.collectAsState()
+
+    // Start the editing session (nothing happens if it is already open, e.g. after rotation),
+    // then give the ViewModel the text that is on screen.
+    LaunchedEffect(noteKey) {
+        viewModel.open(note)
+        viewModel.onTitleChange(title)
+        viewModel.onBodyChange(bodyValue.text)
+    }
+
     // Open the keyboard as soon as the page opens
     LaunchedEffect(Unit) {
         runCatching { bodyFocus.requestFocus() }
     }
 
+    // Back arrow and the phone's Back button / gesture: the ViewModel saves, we close the page.
+    // (There is no Save button. The app going to the background is saved by MainActivity.)
     fun saveAndClose() {
-        val t = title.trim()
-        val b = bodyValue.text.trim()
-        val hasContent = t.isNotEmpty() || b.isNotEmpty()
-        val changed = note == null || t != note.title || b != note.body
-        if (hasContent && changed) onSave(t, b)
+        viewModel.onBack()
         onClose()
     }
 
-    // Phone's Back button / gesture also saves
     BackHandler { saveAndClose() }
 
     val fieldColors = TextFieldDefaults.colors(
@@ -551,7 +517,7 @@ fun EditorScreen(
                     }
                 },
                 actions = {
-                    if (note != null) {
+                    if (canDelete) {
                         IconButton(onClick = { confirmDelete = true }) {
                             Icon(
                                 Icons.Default.Delete,
@@ -576,7 +542,10 @@ fun EditorScreen(
             // Title (optional)
             TextField(
                 value = title,
-                onValueChange = { title = it },
+                onValueChange = {
+                    title = it
+                    viewModel.onTitleChange(it) // only remembered, not saved
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 textStyle = MaterialTheme.typography.headlineSmall.copy(
@@ -600,7 +569,10 @@ fun EditorScreen(
             // Body: fills the rest of the screen
             TextField(
                 value = bodyValue,
-                onValueChange = { bodyValue = it },
+                onValueChange = {
+                    bodyValue = it
+                    viewModel.onBodyChange(it.text) // only remembered, not saved
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -627,7 +599,8 @@ fun EditorScreen(
                 TextButton(
                     onClick = {
                         confirmDelete = false
-                        onDelete()
+                        viewModel.deleteNote()
+                        onClose()
                     }
                 ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
