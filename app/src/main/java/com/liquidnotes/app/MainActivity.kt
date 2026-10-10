@@ -221,6 +221,7 @@ fun DraftoTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = colors,
         shapes = shapes,
+        typography = DraftoTypography,
         content = content
     )
 }
@@ -329,6 +330,7 @@ fun DraftoApp(
                         Icon(Icons.Default.Search, contentDescription = null)
                     },
                     singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge,
                     shape = CircleShape
                 )
 
@@ -362,7 +364,7 @@ fun DraftoApp(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text("📝", fontSize = 54.sp)
+                        Text("📝", fontSize = 54.sp, lineHeight = 76.sp)
                         Spacer(Modifier.height(14.dp))
                         Text(
                             if (search.isBlank()) "Your space is empty"
@@ -395,58 +397,76 @@ fun DraftoApp(
                                 cardColors[(originalIndex.coerceAtLeast(0)) % cardColors.size]
                             }
 
-                            Card(
+                            NoteCard(
+                                note = note,
+                                cardColor = cardColor,
+                                dark = dark,
                                 onClick = {
                                     editingNoteId = note.id
                                     editorOpen = true
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MaterialTheme.shapes.extraLarge,
-                                colors = CardDefaults.cardColors(
-                                    containerColor = cardColor
-                                ),
-                                elevation = CardDefaults.cardElevation(
-                                    defaultElevation = 0.dp
-                                )
-                            ) {
-                                Column(Modifier.padding(20.dp)) {
-                                    Text(
-                                        getDisplayTitle(note),
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (dark) MaterialTheme.colorScheme.onSurface
-                                        else Color(0xFF24243A),
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    val preview = getPreviewBody(note)
-                                    if (preview.isNotEmpty()) {
-                                        Spacer(Modifier.height(8.dp))
-                                        Text(
-                                            preview,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                                            else Color(0xFF454559),
-                                            maxLines = 3,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    Spacer(Modifier.height(14.dp))
-                                    Text(
-                                        SimpleDateFormat(
-                                            "dd MMM yyyy · hh:mm a",
-                                            Locale.getDefault()
-                                        ).format(Date(note.updatedAt)),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                                        else Color(0xFF626278)
-                                    )
                                 }
-                            }
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+// ----------------------------- Note card -----------------------------------
+
+/** One note in the list. Also used by FontAuditPreview. */
+@Composable
+fun NoteCard(
+    note: Note,
+    cardColor: Color,
+    dark: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = cardColor
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 0.dp
+        )
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Text(
+                getDisplayTitle(note),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (dark) MaterialTheme.colorScheme.onSurface
+                else Color(0xFF24243A),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            val preview = getPreviewBody(note)
+            if (preview.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    preview,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    else Color(0xFF454559),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(
+                SimpleDateFormat(
+                    "dd MMM yyyy · hh:mm a",
+                    Locale.getDefault()
+                ).format(Date(note.updatedAt)),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                else Color(0xFF626278)
+            )
         }
     }
 }
