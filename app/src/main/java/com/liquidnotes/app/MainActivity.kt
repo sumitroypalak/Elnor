@@ -139,7 +139,7 @@ class MainActivity : ComponentActivity() {
             }
         )
 
-        val repository = PrefsNoteRepository.get(applicationContext)
+        val repository = RoomNoteRepository.get(applicationContext)
         setContent {
             DraftoRoot(repository = repository, editorViewModel = editorViewModel)
         }
@@ -248,9 +248,11 @@ fun DraftoApp(
         Color(0xFFFFEACD),
         Color(0xFFF9DFEA)
     )
-    val visibleNotes = notes.filter {
-        it.title.contains(search, true) ||
-            it.body.contains(search, true)
+    // Search runs in the database, on the normalized searchText column.
+    // The old list stays on screen until the new result arrives (no flicker while typing).
+    var visibleNotes by remember { mutableStateOf(notes) }
+    LaunchedEffect(search) {
+        repository.search(search).collect { visibleNotes = it }
     }
 
     val listState = rememberLazyListState()
