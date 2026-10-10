@@ -191,14 +191,14 @@ class NoteEditorViewModel(
     }
 
     companion object {
-        /** Creates the ViewModel with the real storage and the application-level scope. */
+        /** Creates the ViewModel with the real storage (Room) and the application-level scope. */
         fun factory(context: Context): ViewModelProvider.Factory {
             val appContext = context.applicationContext
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     return NoteEditorViewModel(
-                        repository = PrefsNoteRepository.get(appContext),
+                        repository = RoomNoteRepository.get(appContext),
                         saveScope = ApplicationScope.scope
                     ) as T
                 }
