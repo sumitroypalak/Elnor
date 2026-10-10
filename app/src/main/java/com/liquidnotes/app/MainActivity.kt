@@ -4,7 +4,11 @@ package com.drafto.app
 
 import android.app.Activity
 import android.content.Context
+import android.content.res.Configuration
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.view.View
+import android.view.Window
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -20,6 +24,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
@@ -39,10 +45,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -108,15 +116,26 @@ fun getPreviewBody(note: Note): String {
 
 // ----------------------------- Settings storage ----------------------------
 
-/** null = user never chose, so follow the phone's system theme. */
-private fun loadDarkOverride(context: Context): Boolean? {
-    val prefs = context.getSharedPreferences("drafto_settings", Context.MODE_PRIVATE)
-    return if (prefs.contains("dark_mode")) prefs.getBoolean("dark_mode", false) else null
+private const val SETTINGS_FILE = "drafto_settings"
+private const val KEY_THEME_MODE = "theme_mode"
+
+/** Key of the old two-state switch (true = dark). Only read, so an earlier choice is kept. */
+private const val KEY_LEGACY_DARK_MODE = "dark_mode"
+
+/** Reads the saved theme. Nothing saved means SYSTEM. */
+private fun loadThemeMode(context: Context): ThemeMode {
+    val prefs = context.getSharedPreferences(SETTINGS_FILE, Context.MODE_PRIVATE)
+    val legacyDark =
+        if (prefs.contains(KEY_LEGACY_DARK_MODE)) prefs.getBoolean(KEY_LEGACY_DARK_MODE, false) else null
+    return ThemeMode.fromStorage(prefs.getString(KEY_THEME_MODE, null), legacyDark)
 }
 
-private fun saveDarkMode(context: Context, dark: Boolean) {
-    context.getSharedPreferences("drafto_settings", Context.MODE_PRIVATE)
-        .edit().putBoolean("dark_mode", dark).apply()
+private fun saveThemeMode(context: Context, mode: ThemeMode) {
+    context.getSharedPreferences(SETTINGS_FILE, Context.MODE_PRIVATE)
+        .edit()
+        .putString(KEY_THEME_MODE, mode.storageValue)
+        .remove(KEY_LEGACY_DARK_MODE) // the new value replaces the old switch
+        .apply()
 }
 
 // ----------------------------- Activity & root -----------------------------
@@ -132,6 +151,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Read the saved theme before anything is drawn, and paint the window (colour and
+        // status/navigation bar icons) at once. So the first frame never shows the wrong theme.
+        val initialThemeMode = loadThemeMode(applicationContext)
+        val systemDark =
+            (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+        applyWindowTheme(window, window.decorView, initialThemeMode.isDark(systemDark))
+
         // Auto-save when the app goes to the background (Lifecycle ON_STOP)
         lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
@@ -141,27 +168,37 @@ class MainActivity : ComponentActivity() {
 
         val repository = RoomNoteRepository.get(applicationContext)
         setContent {
-            DraftoRoot(repository = repository, editorViewModel = editorViewModel)
+            DraftoRoot(
+                repository = repository,
+                editorViewModel = editorViewModel,
+                initialThemeMode = initialThemeMode
+            )
         }
     }
 }
 
 @Composable
-fun DraftoRoot(repository: NoteRepository, editorViewModel: NoteEditorViewModel) {
+fun DraftoRoot(
+    repository: NoteRepository,
+    editorViewModel: NoteEditorViewModel,
+    initialThemeMode: ThemeMode
+) {
     val context = LocalContext.current
+    // Changes by itself when the phone switches between light and dark
     val systemDark = isSystemInDarkTheme()
-    var darkOverride by remember { mutableStateOf(loadDarkOverride(context)) }
-    val darkTheme = darkOverride ?: systemDark
+    var themeMode by remember { mutableStateOf(initialThemeMode) }
+    val darkTheme = themeMode.isDark(systemDark)
     var showSettings by rememberSaveable { mutableStateOf(false) }
 
     DraftoTheme(darkTheme = darkTheme) {
         if (showSettings) {
             BackHandler { showSettings = false }
             SettingsScreen(
-                darkTheme = darkTheme,
-                onDarkThemeChange = {
-                    darkOverride = it
-                    saveDarkMode(context, it)
+                themeMode = themeMode,
+                systemDark = systemDark,
+                onThemeModeChange = {
+                    themeMode = it
+                    saveThemeMode(context, it)
                 },
                 onBack = { showSettings = false }
             )
@@ -176,25 +213,40 @@ fun DraftoRoot(repository: NoteRepository, editorViewModel: NoteEditorViewModel)
     }
 }
 
+/** The only place where the app's light and dark colours are defined. */
+fun draftoColorScheme(dark: Boolean): ColorScheme = if (dark) {
+    darkColorScheme(
+        primary = Color(0xFFB9B5FF),
+        primaryContainer = Color(0xFF433AA8),
+        onPrimaryContainer = Color(0xFFE4E0FF),
+        background = Color(0xFF10111B),
+        surface = Color(0xFF1C1D2B)
+    )
+} else {
+    lightColorScheme(
+        primary = Color(0xFF6257D9),
+        primaryContainer = Color(0xFFE4E0FF),
+        onPrimaryContainer = Color(0xFF1B1464),
+        background = Color(0xFFF5F5FC),
+        surface = Color(0xFFFFFFFF)
+    )
+}
+
+/**
+ * Makes the window itself match the theme: the colour behind the app (seen behind the keyboard
+ * and while the screen changes) and the icons of the status and navigation bars.
+ * Used at launch (MainActivity) and every time the theme changes (DraftoTheme).
+ */
+private fun applyWindowTheme(window: Window, view: View, dark: Boolean) {
+    window.setBackgroundDrawable(ColorDrawable(draftoColorScheme(dark).background.toArgb()))
+    val controller = WindowCompat.getInsetsController(window, view)
+    controller.isAppearanceLightStatusBars = !dark
+    controller.isAppearanceLightNavigationBars = !dark
+}
+
 @Composable
 fun DraftoTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
-    val colors = if (darkTheme) {
-        darkColorScheme(
-            primary = Color(0xFFB9B5FF),
-            primaryContainer = Color(0xFF433AA8),
-            onPrimaryContainer = Color(0xFFE4E0FF),
-            background = Color(0xFF10111B),
-            surface = Color(0xFF1C1D2B)
-        )
-    } else {
-        lightColorScheme(
-            primary = Color(0xFF6257D9),
-            primaryContainer = Color(0xFFE4E0FF),
-            onPrimaryContainer = Color(0xFF1B1464),
-            background = Color(0xFFF5F5FC),
-            surface = Color(0xFFFFFFFF)
-        )
-    }
+    val colors = draftoColorScheme(darkTheme)
 
     // Large, rounded shapes in the Material 3 Expressive style
     val shapes = Shapes(
@@ -205,16 +257,12 @@ fun DraftoTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
         extraLarge = RoundedCornerShape(36.dp)
     )
 
-    // Keep status/navigation bar icons readable with the in-app theme
+    // Keep the window and the status/navigation bar icons in step with the in-app theme.
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window
-            if (window != null) {
-                val controller = WindowCompat.getInsetsController(window, view)
-                controller.isAppearanceLightStatusBars = !darkTheme
-                controller.isAppearanceLightNavigationBars = !darkTheme
-            }
+            if (window != null) applyWindowTheme(window, view, darkTheme)
         }
     }
 
@@ -641,8 +689,9 @@ fun EditorScreen(
 
 @Composable
 fun SettingsScreen(
-    darkTheme: Boolean,
-    onDarkThemeChange: (Boolean) -> Unit,
+    themeMode: ThemeMode,
+    systemDark: Boolean,
+    onThemeModeChange: (ThemeMode) -> Unit,
     onBack: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
@@ -682,29 +731,30 @@ fun SettingsScreen(
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .selectableGroup()
+                        .padding(vertical = 8.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Dark mode",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            if (darkTheme) "Dark theme is on" else "Light theme is on",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                        )
-                    }
-                    Switch(
-                        checked = darkTheme,
-                        onCheckedChange = onDarkThemeChange
+                    ThemeOptionRow(
+                        title = "Light",
+                        description = "Always use the light theme",
+                        selected = themeMode == ThemeMode.LIGHT,
+                        onSelect = { onThemeModeChange(ThemeMode.LIGHT) }
+                    )
+                    ThemeOptionRow(
+                        title = "Dark",
+                        description = "Always use the dark theme",
+                        selected = themeMode == ThemeMode.DARK,
+                        onSelect = { onThemeModeChange(ThemeMode.DARK) }
+                    )
+                    ThemeOptionRow(
+                        title = "System default",
+                        description = "Follow your phone (now " +
+                            (if (systemDark) "dark" else "light") + ")",
+                        selected = themeMode == ThemeMode.SYSTEM,
+                        onSelect = { onThemeModeChange(ThemeMode.SYSTEM) }
                     )
                 }
             }
@@ -782,6 +832,39 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+/** One choice in the theme list. The whole row can be tapped; screen readers see a radio button. */
+@Composable
+private fun ThemeOptionRow(
+    title: String,
+    description: String,
+    selected: Boolean,
+    onSelect: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, onClick = onSelect, role = Role.RadioButton)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+            )
+        }
+        RadioButton(selected = selected, onClick = null)
     }
 }
 
