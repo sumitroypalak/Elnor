@@ -18,6 +18,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -195,7 +196,6 @@ fun DraftoRoot(
             BackHandler { showSettings = false }
             SettingsScreen(
                 themeMode = themeMode,
-                systemDark = systemDark,
                 onThemeModeChange = {
                     themeMode = it
                     saveThemeMode(context, it)
@@ -690,12 +690,13 @@ fun EditorScreen(
 @Composable
 fun SettingsScreen(
     themeMode: ThemeMode,
-    systemDark: Boolean,
     onThemeModeChange: (ThemeMode) -> Unit,
     onBack: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
     val bgColor = MaterialTheme.colorScheme.background
+    // rememberSaveable: the dialog stays open if the screen is recreated (rotation, phone theme change)
+    var showThemeDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         containerColor = bgColor,
@@ -731,32 +732,37 @@ fun SettingsScreen(
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
+                // One row: the title, and the current choice below it. Tap to change.
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .selectableGroup()
-                        .padding(vertical = 8.dp)
+                        .clickable(role = Role.Button) { showThemeDialog = true }
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
-                    ThemeOptionRow(
-                        title = "Light",
-                        description = "Always use the light theme",
-                        selected = themeMode == ThemeMode.LIGHT,
-                        onSelect = { onThemeModeChange(ThemeMode.LIGHT) }
+                    Text(
+                        "Theme",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    ThemeOptionRow(
-                        title = "Dark",
-                        description = "Always use the dark theme",
-                        selected = themeMode == ThemeMode.DARK,
-                        onSelect = { onThemeModeChange(ThemeMode.DARK) }
-                    )
-                    ThemeOptionRow(
-                        title = "System default",
-                        description = "Follow your phone (now " +
-                            (if (systemDark) "dark" else "light") + ")",
-                        selected = themeMode == ThemeMode.SYSTEM,
-                        onSelect = { onThemeModeChange(ThemeMode.SYSTEM) }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        themeMode.label(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
                     )
                 }
+            }
+
+            if (showThemeDialog) {
+                ThemeDialog(
+                    current = themeMode,
+                    onSelect = { mode ->
+                        showThemeDialog = false
+                        if (mode != themeMode) onThemeModeChange(mode) // applies and saves, see DraftoRoot
+                    },
+                    onDismiss = { showThemeDialog = false }
+                )
             }
 
             // ---- About developer ----
@@ -835,37 +841,60 @@ fun SettingsScreen(
     }
 }
 
-/** One choice in the theme list. The whole row can be tapped; screen readers see a radio button. */
+/** The text of each theme, in the Settings row and in the dialog. */
+private fun ThemeMode.label(): String = when (this) {
+    ThemeMode.LIGHT -> "Light"
+    ThemeMode.DARK -> "Dark"
+    ThemeMode.SYSTEM -> "System default"
+}
+
+private val themeChoices = listOf(ThemeMode.LIGHT, ThemeMode.DARK, ThemeMode.SYSTEM)
+
+/**
+ * "Choose theme": three radio buttons, the current one is checked.
+ * Tapping a row selects it at once (the caller applies it and closes the dialog).
+ * Tapping outside, the Back button or Cancel closes it without a change.
+ */
 @Composable
-private fun ThemeOptionRow(
-    title: String,
-    description: String,
-    selected: Boolean,
-    onSelect: () -> Unit
+private fun ThemeDialog(
+    current: ThemeMode,
+    onSelect: (ThemeMode) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, onClick = onSelect, role = Role.RadioButton)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-            )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose theme", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.selectableGroup()) {
+                for (mode in themeChoices) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = mode == current,
+                                onClick = { onSelect(mode) },
+                                role = Role.RadioButton
+                            )
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // onClick = null: the whole row is the button (better for screen readers)
+                        RadioButton(selected = mode == current, onClick = null)
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            mode.label(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-        RadioButton(selected = selected, onClick = null)
-    }
+    )
 }
 
 @Composable
