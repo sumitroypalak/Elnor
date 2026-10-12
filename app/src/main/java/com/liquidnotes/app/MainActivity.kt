@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
@@ -58,11 +60,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------------------
 // ✏️ DEVELOPER INFO — change these 4 lines to your own details
@@ -178,6 +182,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** The screens the user can open from the home screen. */
+private enum class AppScreen { HOME, SETTINGS, TRASH }
+
 @Composable
 fun DraftoRoot(
     repository: NoteRepository,
@@ -189,26 +196,36 @@ fun DraftoRoot(
     val systemDark = isSystemInDarkTheme()
     var themeMode by remember { mutableStateOf(initialThemeMode) }
     val darkTheme = themeMode.isDark(systemDark)
-    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var screen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
 
     DraftoTheme(darkTheme = darkTheme) {
-        if (showSettings) {
-            BackHandler { showSettings = false }
-            SettingsScreen(
-                themeMode = themeMode,
-                onThemeModeChange = {
-                    themeMode = it
-                    saveThemeMode(context, it)
-                },
-                onBack = { showSettings = false }
-            )
-        } else {
-            DraftoApp(
-                dark = darkTheme,
-                repository = repository,
-                editorViewModel = editorViewModel,
-                onOpenSettings = { showSettings = true }
-            )
+        when (screen) {
+            AppScreen.SETTINGS -> {
+                BackHandler { screen = AppScreen.HOME }
+                SettingsScreen(
+                    themeMode = themeMode,
+                    onThemeModeChange = {
+                        themeMode = it
+                        saveThemeMode(context, it)
+                    },
+                    onBack = { screen = AppScreen.HOME }
+                )
+            }
+
+            AppScreen.TRASH -> {
+                BackHandler { screen = AppScreen.HOME }
+                TrashPlaceholderScreen(onBack = { screen = AppScreen.HOME })
+            }
+
+            AppScreen.HOME -> {
+                DraftoApp(
+                    dark = darkTheme,
+                    repository = repository,
+                    editorViewModel = editorViewModel,
+                    onOpenSettings = { screen = AppScreen.SETTINGS },
+                    onOpenTrash = { screen = AppScreen.TRASH }
+                )
+            }
         }
     }
 }
@@ -281,7 +298,8 @@ fun DraftoApp(
     dark: Boolean,
     repository: NoteRepository,
     editorViewModel: NoteEditorViewModel,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenTrash: () -> Unit
 ) {
     // The list follows the repository, so it updates by itself after every auto-save
     val notes by repository.notes.collectAsState()
@@ -318,146 +336,269 @@ fun DraftoApp(
             onClose = { editorOpen = false }
         )
     } else {
-        Scaffold(
-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-            containerColor = bgColor,
-            topBar = {
-                LargeTopAppBar(
-                    title = {
-                        Text("Drafto", fontWeight = FontWeight.Bold)
-                    },
-                    actions = {
-                        FilledTonalIconButton(
-                            onClick = onOpenSettings,
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = bgColor,
-                        scrolledContainerColor = bgColor
-                    ),
-                    scrollBehavior = scrollBehavior
-                )
-            },
-            floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = {
-                        editingNoteId = null
-                        editorOpen = true
-                    },
-                    expanded = fabExpanded,
-                    icon = { Icon(Icons.Default.Add, contentDescription = "New note") },
-                    text = { Text("New note") },
-                    shape = MaterialTheme.shapes.extraLarge
-                )
-            }
-        ) { padding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(bgColor)
-                    .padding(padding)
-                    .padding(horizontal = 20.dp)
-            ) {
-                Text(
-                    "Your thoughts, beautifully organized.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
-                )
+        val drawerState = rememberDrawerState(DrawerValue.Closed)
+        val drawerScope = rememberCoroutineScope()
+        // The Back button closes the side menu first
+        BackHandler(enabled = drawerState.isOpen) {
+            drawerScope.launch { drawerState.close() }
+        }
 
-                Spacer(Modifier.height(16.dp))
-
-                OutlinedTextField(
-                    value = search,
-                    onValueChange = { search = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search your notes...") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null)
-                    },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyLarge,
-                    shape = CircleShape
-                )
-
-                Spacer(Modifier.height(24.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+        EndDrawer(
+            drawerState = drawerState,
+            onOpenSettings = onOpenSettings,
+            onOpenTrash = onOpenTrash
+        ) {
+            Scaffold(
+                modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+                containerColor = bgColor,
+                topBar = {
+                    LargeTopAppBar(
+                        title = {
+                            Text("Drafto", fontWeight = FontWeight.Bold)
+                        },
+                        actions = {
+                            // Hamburger button: opens the side menu (Settings, Trash)
+                            FilledTonalIconButton(
+                                onClick = { drawerScope.launch { drawerState.open() } },
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Icon(Icons.Default.Menu, contentDescription = "Open menu")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = bgColor,
+                            scrolledContainerColor = bgColor
+                        ),
+                        scrollBehavior = scrollBehavior
+                    )
+                },
+                floatingActionButton = {
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            editingNoteId = null
+                            editorOpen = true
+                        },
+                        expanded = fabExpanded,
+                        icon = { Icon(Icons.Default.Add, contentDescription = "New note") },
+                        text = { Text("New note") },
+                        shape = MaterialTheme.shapes.extraLarge
+                    )
+                }
+            ) { padding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(bgColor)
+                        .padding(padding)
+                        .padding(horizontal = 20.dp)
                 ) {
                     Text(
-                        "Your notes",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.weight(1f)
+                        "Your thoughts, beautifully organized.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
                     )
-                    Text(
-                        "${notes.size} notes",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
+
+                    Spacer(Modifier.height(16.dp))
+
+                    OutlinedTextField(
+                        value = search,
+                        onValueChange = { search = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search your notes...") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge,
+                        shape = CircleShape
                     )
-                }
 
-                Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(24.dp))
 
-                if (visibleNotes.isEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("📝", fontSize = 54.sp, lineHeight = 76.sp)
-                        Spacer(Modifier.height(14.dp))
                         Text(
-                            if (search.isBlank()) "Your space is empty"
-                            else "No notes found",
+                            "Your notes",
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onBackground
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.weight(1f)
                         )
-                        Spacer(Modifier.height(8.dp))
                         Text(
-                            if (search.isBlank())
-                                "Tap + to capture your first thought."
-                            else "Try searching with another word.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+                            "${notes.size} notes",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(13.dp),
-                        contentPadding = PaddingValues(bottom = 100.dp)
-                    ) {
-                        items(visibleNotes, key = { it.id }) { note ->
-                            val originalIndex = notes.indexOfFirst { it.id == note.id }
-                            val cardColor = if (dark) {
-                                MaterialTheme.colorScheme.surface
-                            } else {
-                                cardColors[(originalIndex.coerceAtLeast(0)) % cardColors.size]
-                            }
 
-                            NoteCard(
-                                note = note,
-                                cardColor = cardColor,
-                                dark = dark,
-                                onClick = {
-                                    editingNoteId = note.id
-                                    editorOpen = true
-                                }
+                    Spacer(Modifier.height(14.dp))
+
+                    if (visibleNotes.isEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text("📝", fontSize = 54.sp, lineHeight = 76.sp)
+                            Spacer(Modifier.height(14.dp))
+                            Text(
+                                if (search.isBlank()) "Your space is empty"
+                                else "No notes found",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onBackground
                             )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                if (search.isBlank())
+                                    "Tap + to capture your first thought."
+                                else "Try searching with another word.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(13.dp),
+                            contentPadding = PaddingValues(bottom = 100.dp)
+                        ) {
+                            items(visibleNotes, key = { it.id }) { note ->
+                                val originalIndex = notes.indexOfFirst { it.id == note.id }
+                                val cardColor = if (dark) {
+                                    MaterialTheme.colorScheme.surface
+                                } else {
+                                    cardColors[(originalIndex.coerceAtLeast(0)) % cardColors.size]
+                                }
+
+                                NoteCard(
+                                    note = note,
+                                    cardColor = cardColor,
+                                    dark = dark,
+                                    onClick = {
+                                        editingNoteId = note.id
+                                        editorOpen = true
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+// ----------------------------- Side menu -----------------------------------
+
+/**
+ * The side menu with Settings and Trash. The menu button is at the top right, so the menu also
+ * comes in from the right (the end of the screen). ModalNavigationDrawer always opens from the
+ * start side, so its layout direction is turned around, and turned back for everything inside.
+ * Tapping outside the menu, swiping it away or pressing Back closes it.
+ */
+@Composable
+private fun EndDrawer(
+    drawerState: DrawerState,
+    onOpenSettings: () -> Unit,
+    onOpenTrash: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val direction = LocalLayoutDirection.current
+    val flipped = if (direction == LayoutDirection.Ltr) LayoutDirection.Rtl else LayoutDirection.Ltr
+
+    CompositionLocalProvider(LocalLayoutDirection provides flipped) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                CompositionLocalProvider(LocalLayoutDirection provides direction) {
+                    ModalDrawerSheet(
+                        // rounded on the side that faces the screen, like the rest of the app
+                        drawerShape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp),
+                        drawerContainerColor = MaterialTheme.colorScheme.surface
+                    ) {
+                        Text(
+                            "Drafto",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)
+                        )
+                        NavigationDrawerItem(
+                            label = { Text("Settings") },
+                            selected = false,
+                            onClick = onOpenSettings,
+                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                        )
+                        NavigationDrawerItem(
+                            label = { Text("Trash") },
+                            selected = false,
+                            onClick = onOpenTrash,
+                            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                        )
+                    }
+                }
+            },
+            content = {
+                CompositionLocalProvider(LocalLayoutDirection provides direction) {
+                    content()
+                }
+            }
+        )
+    }
+}
+
+// ----------------------------- Trash screen --------------------------------
+
+/**
+ * The page the "Trash" menu item opens. Notes are still deleted for good (there is no Trash
+ * system yet), so for now this is only the empty page. It is its own composable, so the real
+ * Trash list can replace it later without touching the menu or the navigation.
+ */
+@Composable
+private fun TrashPlaceholderScreen(onBack: () -> Unit) {
+    val bgColor = MaterialTheme.colorScheme.background
+
+    Scaffold(
+        containerColor = bgColor,
+        topBar = {
+            TopAppBar(
+                title = { Text("Trash", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text("\uD83D\uDDD1\uFE0F", fontSize = 54.sp, lineHeight = 76.sp)
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "Trash is empty",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
         }
     }
 }
