@@ -865,7 +865,9 @@ fun NoteCard(
             defaultElevation = 0.dp
         )
     ) {
-        Box {
+        // fillMaxWidth: the Box is always as wide as the card, not only as wide as the text.
+        // Then the menu button below (TopEnd) stays at the same place for every title length.
+        Box(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
                 Text(
                     getDisplayTitle(note),
