@@ -74,6 +74,11 @@ class RoomNoteRepository(
         dao.deleteAllTrashed()
     }
 
+    // A note is expired when now - deletedAt >= 30 days, that is deletedAt <= now - 30 days.
+    // If the phone's clock goes backwards, the cutoff moves back too, so nothing is removed early.
+    override suspend fun purgeExpiredTrash(): Int =
+        dao.deleteTrashedUpTo(now() - TRASH_RETENTION_MS)
+
     companion object {
         @Volatile
         private var instance: RoomNoteRepository? = null

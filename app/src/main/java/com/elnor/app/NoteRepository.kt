@@ -1,10 +1,13 @@
 package com.elnor.app
 
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Where notes are stored. The editor ViewModel only knows this interface, so tests can use
@@ -50,6 +53,39 @@ interface NoteRepository {
 
     /** Removes every note in the Trash for good. */
     suspend fun emptyTrash()
+
+    /**
+     * Removes for good every note that has been in the Trash for [TRASH_RETENTION_DAYS] days or
+     * longer, counted from the time it was moved there (its deletedAt). Notes that are not in
+     * the Trash are never touched. Returns how many notes were removed.
+     */
+    suspend fun purgeExpiredTrash(): Int
+}
+
+/** How long a note stays in the Trash. After this many days it is deleted for good. */
+const val TRASH_RETENTION_DAYS = 30
+
+/**
+ * [TRASH_RETENTION_DAYS] in milliseconds (30 x 24 hours). deletedAt is a point in time
+ * (milliseconds since 1970), so the count keeps going while the app is closed.
+ */
+const val TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24L * 60L * 60L * 1000L
+
+/**
+ * Starts [NoteRepository.purgeExpiredTrash] in the background. It runs in [ApplicationScope],
+ * like saves do, so leaving a screen cannot cancel it half-way. A failure is only logged:
+ * cleaning the Trash must never crash the app.
+ */
+fun NoteRepository.purgeExpiredTrashInBackground() {
+    ApplicationScope.scope.launch {
+        try {
+            purgeExpiredTrash()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("NoteRepository", "Cleaning the Trash failed", e)
+        }
+    }
 }
 
 /**

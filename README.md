@@ -8,6 +8,7 @@ Features
 - Edit notes
 - Delete notes (they go to the Trash first)
 - Trash: restore a note, delete it for good, or empty the Trash
+- Notes in the Trash are deleted automatically 30 days after they were moved there
 
 About
 

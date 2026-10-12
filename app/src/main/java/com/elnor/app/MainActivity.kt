@@ -177,6 +177,8 @@ class MainActivity : ComponentActivity() {
         )
 
         val repository = RoomNoteRepository.get(applicationContext)
+        // Notes that have been in the Trash for 30 days are deleted for good when the app starts
+        repository.purgeExpiredTrashInBackground()
         setContent {
             ElnorRoot(
                 repository = repository,
@@ -587,6 +589,12 @@ private fun TrashScreen(
     var confirmEmpty by rememberSaveable { mutableStateOf(false) }
     val notes = trashed
 
+    // Opening the Trash also removes the notes that have been here for 30 days. The list
+    // updates by itself when they are gone.
+    LaunchedEffect(Unit) {
+        repository.purgeExpiredTrashInBackground()
+    }
+
     Scaffold(
         containerColor = bgColor,
         topBar = {
@@ -657,7 +665,8 @@ private fun TrashScreen(
             ) {
                 item {
                     Text(
-                        "Tap a note to read all of it. Restore it, or delete it for good.",
+                        "Notes are deleted for good $TRASH_RETENTION_DAYS days after they were " +
+                            "moved here. Tap a note to read all of it.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
                     )
@@ -997,7 +1006,12 @@ fun EditorScreen(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete note?", fontWeight = FontWeight.Bold) },
-            text = { Text("This note will be moved to Trash. You can restore it from there.") },
+            text = {
+                Text(
+                    "This note will be moved to Trash. You can restore it within " +
+                        "$TRASH_RETENTION_DAYS days. After that it is deleted for good."
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {

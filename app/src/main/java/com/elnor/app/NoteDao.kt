@@ -70,4 +70,12 @@ interface NoteDao {
     /** Removes every note that is in the Trash, for good. */
     @Query("DELETE FROM notes WHERE deletedAt IS NOT NULL")
     suspend fun deleteAllTrashed()
+
+    /**
+     * Removes the notes that were put in the Trash at [cutoff] or earlier, for good. A normal
+     * note has deletedAt NULL, so it can never match, whatever its updatedAt is.
+     * Returns how many rows were removed.
+     */
+    @Query("DELETE FROM notes WHERE deletedAt IS NOT NULL AND deletedAt <= :cutoff")
+    suspend fun deleteTrashedUpTo(cutoff: Long): Int
 }
