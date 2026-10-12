@@ -12,10 +12,21 @@ import org.json.JSONArray
 /**
  * Version 1: table "notes" with id, title, body, updatedAt.
  * Version 2: adds the searchText column (see SearchText).
+ * Version 3: adds the deletedAt column (the Trash, see NoteEntity).
  */
-@Database(entities = [NoteEntity::class], version = 2, exportSchema = false)
+@Database(entities = [NoteEntity::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
+}
+
+/**
+ * Adds deletedAt. It is empty (NULL) for every note that already exists, so all old notes
+ * stay normal notes. Nothing else in the table is touched.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE notes ADD COLUMN deletedAt INTEGER")
+    }
 }
 
 /** Adds searchText and fills it for every note that already exists (backfill). */

@@ -6,7 +6,8 @@ Features
 
 - Create notes
 - Edit notes
-- Delete notes
+- Delete notes (they go to the Trash first)
+- Trash: restore a note, delete it for good, or empty the Trash
 
 About
 

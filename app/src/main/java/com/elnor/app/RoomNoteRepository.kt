@@ -11,10 +11,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.runBlocking
 
-/** Room (SQLite) storage. [scope] keeps [notes] up to date; tests pass their own scope. */
+/**
+ * Room (SQLite) storage. [scope] keeps [notes] up to date; tests pass their own scope.
+ * [now] is the clock for the time a note was deleted. Replaced in tests.
+ */
 class RoomNoteRepository(
     private val dao: NoteDao,
-    scope: CoroutineScope
+    scope: CoroutineScope,
+    private val now: () -> Long = { System.currentTimeMillis() }
 ) : NoteRepository {
 
     // The first value is read once, right away. Without it the list would be empty for a
@@ -27,6 +31,9 @@ class RoomNoteRepository(
             runBlocking(Dispatchers.IO) { dao.getAll() }.map { it.toNote() }
         )
 
+    override val trashedNotes: Flow<List<Note>> = dao.observeTrashed()
+        .map { list -> list.map { it.toNote() } }
+
     override fun search(query: String): Flow<List<Note>> {
         if (query.isBlank()) return notes
         return dao.search(SearchText.toLikeTerm(query))
@@ -34,15 +41,37 @@ class RoomNoteRepository(
     }
 
     // id = 0 means "new row": Room gives the next free id and returns it.
-    override suspend fun insert(note: Note): Long = dao.insert(note.toEntity().copy(id = 0L))
+    // A new note is never in the Trash, whatever deletedAt the given note has.
+    override suspend fun insert(note: Note): Long =
+        dao.insert(note.toEntity().copy(id = 0L, deletedAt = null))
 
     // toEntity() builds searchText again from the new title and body.
+    // Only the text columns are written, so deletedAt is never changed by a save.
     override suspend fun update(note: Note) {
-        dao.update(note.toEntity())
+        val entity = note.toEntity()
+        dao.updateContent(
+            id = entity.id,
+            title = entity.title,
+            body = entity.body,
+            updatedAt = entity.updatedAt,
+            searchText = entity.searchText
+        )
     }
 
-    override suspend fun delete(id: Long) {
+    override suspend fun moveToTrash(id: Long) {
+        dao.moveToTrash(id, now())
+    }
+
+    override suspend fun restore(id: Long) {
+        dao.restore(id)
+    }
+
+    override suspend fun deletePermanently(id: Long) {
         dao.deleteById(id)
+    }
+
+    override suspend fun emptyTrash() {
+        dao.deleteAllTrashed()
     }
 
     companion object {
@@ -57,7 +86,7 @@ class RoomNoteRepository(
 
         private fun create(appContext: Context): RoomNoteRepository {
             val database = Room.databaseBuilder(appContext, AppDatabase::class.java, "elnor_notes_room.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .addCallback(LegacyNotesImport(appContext))
                 .build()
             return RoomNoteRepository(database.noteDao(), ApplicationScope.scope)

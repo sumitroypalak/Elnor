@@ -26,7 +26,10 @@ import kotlinx.coroutines.launch
  *    session, so every later save of that note is an update. No second copy is created.
  *  - An existing note that was changed is updated and gets a new updatedAt.
  *    If nothing changed, it is not touched.
- *  - An existing note whose title and body were both cleared is deleted.
+ *  - An existing note whose title and body were both cleared is moved to the Trash (it keeps
+ *    the text that was last saved, so it can still be restored from there).
+ *  - Deleting a note moves it to the Trash. Nothing is removed for good here. Only the Trash
+ *    screen can do that.
  *
  * Why saves run in [saveScope] (an application-level scope) and not in viewModelScope:
  * when the user leaves the screen, the ViewModel can be cleared at the same moment the
@@ -125,7 +128,7 @@ class NoteEditorViewModel(
         commands.trySend(Command.Save(current, draftTitle, draftBody))
     }
 
-    /** The user chose "Delete note". Removes the note if it was saved, and ends the session. */
+    /** The user chose "Delete note". Moves the note to the Trash if it was saved, and ends the session. */
     fun deleteNote() {
         val current = session ?: return
         session = null
@@ -144,7 +147,7 @@ class NoteEditorViewModel(
             is Command.Save -> persist(command.session, command.title, command.body)
             is Command.Delete -> {
                 val id = command.session.id
-                if (id != null) repository.delete(id)
+                if (id != null) repository.moveToTrash(id)
                 command.session.id = null
             }
         }
@@ -158,8 +161,9 @@ class NoteEditorViewModel(
         // Nothing written: a blank note is not worth saving ...
         if (title.isBlank() && body.isBlank()) {
             if (id != null) {
-                // ... and an existing note that was emptied is deleted.
-                repository.delete(id)
+                // ... and an existing note that was emptied leaves the list. It goes to the
+                // Trash with the text that was last saved, so nothing is lost for good.
+                repository.moveToTrash(id)
                 session.id = null
                 session.savedTitle = ""
                 session.savedBody = ""
