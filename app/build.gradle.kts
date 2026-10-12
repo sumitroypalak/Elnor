@@ -5,6 +5,11 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// The APK file name starts with this: Elnor-debug.apk (instead of app-debug.apk)
+base {
+    archivesName.set("Elnor")
+}
+
 android {
     namespace = "com.elnor.app"
     compileSdk = 35
