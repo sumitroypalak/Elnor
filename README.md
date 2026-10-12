@@ -1,4 +1,4 @@
-# Drafto 📝
+# Elnor 📝
 
 A simple Android note-taking app.
 
@@ -10,7 +10,7 @@ Features
 
 About
 
-Drafto is designed to make note-taking simple and convenient.
+Elnor is designed to make note-taking simple and convenient.
 
 License
 

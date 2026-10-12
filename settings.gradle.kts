@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Drafto"
+rootProject.name = "Elnor"
 include(":app")

@@ -1,4 +1,4 @@
-package com.drafto.app
+package com.elnor.app
 
 import androidx.room.Dao
 import androidx.room.Insert

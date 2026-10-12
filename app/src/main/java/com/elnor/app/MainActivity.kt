@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 
-package com.drafto.app
+package com.elnor.app
 
 import android.app.Activity
 import android.content.Context
@@ -121,7 +121,7 @@ fun getPreviewBody(note: Note): String {
 
 // ----------------------------- Settings storage ----------------------------
 
-private const val SETTINGS_FILE = "drafto_settings"
+private const val SETTINGS_FILE = "elnor_settings"
 private const val KEY_THEME_MODE = "theme_mode"
 
 /** Key of the old two-state switch (true = dark). Only read, so an earlier choice is kept. */
@@ -173,7 +173,7 @@ class MainActivity : ComponentActivity() {
 
         val repository = RoomNoteRepository.get(applicationContext)
         setContent {
-            DraftoRoot(
+            ElnorRoot(
                 repository = repository,
                 editorViewModel = editorViewModel,
                 initialThemeMode = initialThemeMode
@@ -186,7 +186,7 @@ class MainActivity : ComponentActivity() {
 private enum class AppScreen { HOME, SETTINGS, TRASH }
 
 @Composable
-fun DraftoRoot(
+fun ElnorRoot(
     repository: NoteRepository,
     editorViewModel: NoteEditorViewModel,
     initialThemeMode: ThemeMode
@@ -198,7 +198,7 @@ fun DraftoRoot(
     val darkTheme = themeMode.isDark(systemDark)
     var screen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
 
-    DraftoTheme(darkTheme = darkTheme) {
+    ElnorTheme(darkTheme = darkTheme) {
         when (screen) {
             AppScreen.SETTINGS -> {
                 BackHandler { screen = AppScreen.HOME }
@@ -218,7 +218,7 @@ fun DraftoRoot(
             }
 
             AppScreen.HOME -> {
-                DraftoApp(
+                ElnorApp(
                     dark = darkTheme,
                     repository = repository,
                     editorViewModel = editorViewModel,
@@ -231,7 +231,7 @@ fun DraftoRoot(
 }
 
 /** The only place where the app's light and dark colours are defined. */
-fun draftoColorScheme(dark: Boolean): ColorScheme = if (dark) {
+fun elnorColorScheme(dark: Boolean): ColorScheme = if (dark) {
     darkColorScheme(
         primary = Color(0xFFB9B5FF),
         primaryContainer = Color(0xFF433AA8),
@@ -252,18 +252,18 @@ fun draftoColorScheme(dark: Boolean): ColorScheme = if (dark) {
 /**
  * Makes the window itself match the theme: the colour behind the app (seen behind the keyboard
  * and while the screen changes) and the icons of the status and navigation bars.
- * Used at launch (MainActivity) and every time the theme changes (DraftoTheme).
+ * Used at launch (MainActivity) and every time the theme changes (ElnorTheme).
  */
 private fun applyWindowTheme(window: Window, view: View, dark: Boolean) {
-    window.setBackgroundDrawable(ColorDrawable(draftoColorScheme(dark).background.toArgb()))
+    window.setBackgroundDrawable(ColorDrawable(elnorColorScheme(dark).background.toArgb()))
     val controller = WindowCompat.getInsetsController(window, view)
     controller.isAppearanceLightStatusBars = !dark
     controller.isAppearanceLightNavigationBars = !dark
 }
 
 @Composable
-fun DraftoTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
-    val colors = draftoColorScheme(darkTheme)
+fun ElnorTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
+    val colors = elnorColorScheme(darkTheme)
 
     // Large, rounded shapes in the Material 3 Expressive style
     val shapes = Shapes(
@@ -286,7 +286,7 @@ fun DraftoTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = colors,
         shapes = shapes,
-        typography = DraftoTypography,
+        typography = ElnorTypography,
         content = content
     )
 }
@@ -294,7 +294,7 @@ fun DraftoTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
 // ----------------------------- Notes screen --------------------------------
 
 @Composable
-fun DraftoApp(
+fun ElnorApp(
     dark: Boolean,
     repository: NoteRepository,
     editorViewModel: NoteEditorViewModel,
@@ -354,7 +354,7 @@ fun DraftoApp(
                 topBar = {
                     LargeTopAppBar(
                         title = {
-                            Text("Drafto", fontWeight = FontWeight.Bold)
+                            Text("Elnor", fontWeight = FontWeight.Bold)
                         },
                         actions = {
                             // Hamburger button: opens the side menu (Settings, Trash)
@@ -523,7 +523,7 @@ private fun EndDrawer(
                         drawerContainerColor = MaterialTheme.colorScheme.surface
                     ) {
                         Text(
-                            "Drafto",
+                            "Elnor",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -900,7 +900,7 @@ fun SettingsScreen(
                     current = themeMode,
                     onSelect = { mode ->
                         showThemeDialog = false
-                        if (mode != themeMode) onThemeModeChange(mode) // applies and saves, see DraftoRoot
+                        if (mode != themeMode) onThemeModeChange(mode) // applies and saves, see ElnorRoot
                     },
                     onDismiss = { showThemeDialog = false }
                 )
@@ -954,7 +954,7 @@ fun SettingsScreen(
 
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        "Drafto is a simple, beautiful note-taking app built with Kotlin and Jetpack Compose.",
+                        "Elnor is a simple, beautiful note-taking app built with Kotlin and Jetpack Compose.",
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
@@ -971,7 +971,7 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(24.dp))
             Text(
-                "Drafto v$APP_VERSION",
+                "Elnor v$APP_VERSION",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center,

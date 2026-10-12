@@ -1,4 +1,4 @@
-package com.drafto.app
+package com.elnor.app
 
 /**
  * The three choices in Settings > Appearance.

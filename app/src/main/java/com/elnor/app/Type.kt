@@ -1,4 +1,4 @@
-package com.drafto.app
+package com.elnor.app
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
@@ -19,14 +19,14 @@ import androidx.compose.ui.unit.sp
  * fallback only fails if the font file itself draws an empty box for a character it does not
  * support. So test the font with FontAuditPreview before using it.
  */
-val DraftoFontFamily: FontFamily = FontFamily.Default
+val ElnorFontFamily: FontFamily = FontFamily.Default
 
 /**
  * Center: the extra space of a tall line is split above and below the text, so a vowel sign
  * above the letter (ই-কার) and a sign below it (উ-কার, the lower part of a conjunct) both have room.
  * Trim.None: the first line's top and the last line's bottom are never cut off.
  */
-private val DraftoLineHeightStyle = LineHeightStyle(
+private val ElnorLineHeightStyle = LineHeightStyle(
     alignment = LineHeightStyle.Alignment.Center,
     trim = LineHeightStyle.Trim.None
 )
@@ -39,16 +39,16 @@ private val DraftoLineHeightStyle = LineHeightStyle(
  *  - one font family and one LineHeightStyle everywhere
  */
 private fun TextStyle.forAllScripts(lineHeightRatio: Float): TextStyle = copy(
-    fontFamily = DraftoFontFamily,
+    fontFamily = ElnorFontFamily,
     lineHeight = fontSize * lineHeightRatio,
     letterSpacing = 0.sp,
-    lineHeightStyle = DraftoLineHeightStyle
+    lineHeightStyle = ElnorLineHeightStyle
 )
 
 private val material3Defaults = Typography()
 
 /** Use this as MaterialTheme(typography = ...). Every Text and TextField reads its style from it. */
-val DraftoTypography = Typography(
+val ElnorTypography = Typography(
     displayLarge = material3Defaults.displayLarge.forAllScripts(1.4f),
     displayMedium = material3Defaults.displayMedium.forAllScripts(1.4f),
     displaySmall = material3Defaults.displaySmall.forAllScripts(1.4f),

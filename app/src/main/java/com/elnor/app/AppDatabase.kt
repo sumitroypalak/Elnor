@@ -1,4 +1,4 @@
-package com.drafto.app
+package com.elnor.app
 
 import android.content.ContentValues
 import android.content.Context
@@ -44,7 +44,7 @@ fun backfillSearchText(db: SupportSQLiteDatabase) {
 }
 
 /**
- * The app used to keep notes in SharedPreferences ("drafto_notes" / "notes", as JSON).
+ * The app used to keep notes in SharedPreferences ("elnor_notes" / "notes", as JSON).
  * When the database file is created for the first time, those notes are copied into it,
  * with searchText filled. The old data is left untouched as a backup.
  */
@@ -66,7 +66,7 @@ class LegacyNotesImport(private val context: Context) : RoomDatabase.Callback() 
     /** Null when there is nothing to import or the old data cannot be read. */
     private fun readLegacyNotes(): List<Note>? {
         return try {
-            val raw = context.getSharedPreferences("drafto_notes", Context.MODE_PRIVATE)
+            val raw = context.getSharedPreferences("elnor_notes", Context.MODE_PRIVATE)
                 .getString("notes", null) ?: return null
             val array = JSONArray(raw)
             List(array.length()) { i ->

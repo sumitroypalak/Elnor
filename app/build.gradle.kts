@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.drafto.app"
+    namespace = "com.elnor.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.drafto.app"
+        applicationId = "com.elnor.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

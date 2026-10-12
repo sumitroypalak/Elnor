@@ -1,4 +1,4 @@
-package com.drafto.app
+package com.elnor.app
 
 import android.icu.text.BreakIterator
 

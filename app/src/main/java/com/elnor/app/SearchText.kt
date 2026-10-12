@@ -1,4 +1,4 @@
-package com.drafto.app
+package com.elnor.app
 
 import java.text.Normalizer
 import java.util.Locale

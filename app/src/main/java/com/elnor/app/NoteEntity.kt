@@ -1,4 +1,4 @@
-package com.drafto.app
+package com.elnor.app
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey

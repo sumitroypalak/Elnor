@@ -1,4 +1,4 @@
-package com.drafto.app
+package com.elnor.app
 
 import android.content.Context
 import androidx.room.Room
@@ -56,7 +56,7 @@ class RoomNoteRepository(
         }
 
         private fun create(appContext: Context): RoomNoteRepository {
-            val database = Room.databaseBuilder(appContext, AppDatabase::class.java, "drafto_notes_room.db")
+            val database = Room.databaseBuilder(appContext, AppDatabase::class.java, "elnor_notes_room.db")
                 .addMigrations(MIGRATION_1_2)
                 .addCallback(LegacyNotesImport(appContext))
                 .build()

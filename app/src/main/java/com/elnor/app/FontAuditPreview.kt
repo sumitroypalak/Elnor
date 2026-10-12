@@ -1,4 +1,4 @@
-package com.drafto.app
+package com.elnor.app
 
 import android.content.res.Configuration
 import androidx.compose.foundation.background
@@ -164,7 +164,7 @@ private fun FontAuditAllStyles() {
 @Preview(name = "Screens - light", showBackground = true, widthDp = 380, heightDp = 1250)
 @Composable
 private fun FontAuditLight() {
-    DraftoTheme(darkTheme = false) { FontAuditScreens(dark = false) }
+    ElnorTheme(darkTheme = false) { FontAuditScreens(dark = false) }
 }
 
 @Preview(
@@ -176,18 +176,18 @@ private fun FontAuditLight() {
 )
 @Composable
 private fun FontAuditDark() {
-    DraftoTheme(darkTheme = true) { FontAuditScreens(dark = true) }
+    ElnorTheme(darkTheme = true) { FontAuditScreens(dark = true) }
 }
 
 // Many people use a bigger system font. Clipping shows up here first.
 @Preview(name = "Screens - font size 1.3x", showBackground = true, widthDp = 380, heightDp = 1750, fontScale = 1.3f)
 @Composable
 private fun FontAuditLargeFont() {
-    DraftoTheme(darkTheme = false) { FontAuditScreens(dark = false) }
+    ElnorTheme(darkTheme = false) { FontAuditScreens(dark = false) }
 }
 
 @Preview(name = "All text styles", showBackground = true, widthDp = 380, heightDp = 2300)
 @Composable
 private fun FontAuditStyles() {
-    DraftoTheme(darkTheme = false) { FontAuditAllStyles() }
+    ElnorTheme(darkTheme = false) { FontAuditAllStyles() }
 }
