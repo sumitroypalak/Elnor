@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -317,6 +318,8 @@ fun ElnorApp(
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var editingNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
     val editingNote = notes.firstOrNull { it.id == editingNoteId }
+    // The note whose "Delete" was chosen in its three-dot menu (by id, never by list position)
+    var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val bgColor = MaterialTheme.colorScheme.background
     val cardColors = listOf(
@@ -493,13 +496,33 @@ fun ElnorApp(
                                     onClick = {
                                         editingNoteId = note.id
                                         editorOpen = true
-                                    }
+                                    },
+                                    menuActions = listOf(
+                                        NoteMenuAction(
+                                            label = "Delete",
+                                            isDestructive = true,
+                                            onClick = { pendingDeleteId = note.id }
+                                        )
+                                    )
                                 )
                             }
                         }
                     }
                 }
             }
+        }
+
+        val deleteId = pendingDeleteId
+        if (deleteId != null) {
+            DeleteNoteDialog(
+                onConfirm = {
+                    pendingDeleteId = null
+                    // The same deletion as in the editor: the note goes to the Trash. The list
+                    // follows the repository, so it updates by itself.
+                    ApplicationScope.scope.launch { repository.moveToTrash(deleteId) }
+                },
+                onDismiss = { pendingDeleteId = null }
+            )
         }
     }
 }
@@ -806,14 +829,31 @@ private fun formatNoteDate(millis: Long): String =
 
 // ----------------------------- Note card -----------------------------------
 
-/** One note in the list. Also used by FontAuditPreview. */
+/**
+ * One entry of the three-dot menu of a note. To add Pin, Archive and so on later, pass one more
+ * entry in the list of [NoteCard]. Nothing else has to change.
+ */
+data class NoteMenuAction(
+    val label: String,
+    val isDestructive: Boolean = false,
+    val onClick: () -> Unit
+)
+
+/**
+ * One note in the list. Also used by FontAuditPreview.
+ * [menuActions] are the entries of the three-dot menu in the top right corner of the card.
+ * With no entries (the default) the menu button is not shown.
+ */
 @Composable
 fun NoteCard(
     note: Note,
     cardColor: Color,
     dark: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    menuActions: List<NoteMenuAction> = emptyList()
 ) {
+    val hasMenu = menuActions.isNotEmpty()
+
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -825,40 +865,124 @@ fun NoteCard(
             defaultElevation = 0.dp
         )
     ) {
-        Column(Modifier.padding(20.dp)) {
-            Text(
-                getDisplayTitle(note),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (dark) MaterialTheme.colorScheme.onSurface
-                else Color(0xFF24243A),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            val preview = getPreviewBody(note)
-            if (preview.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
+        Box {
+            Column(Modifier.padding(20.dp)) {
                 Text(
-                    preview,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                    else Color(0xFF454559),
-                    maxLines = 3,
+                    getDisplayTitle(note),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (dark) MaterialTheme.colorScheme.onSurface
+                    else Color(0xFF24243A),
+                    // keeps the title out from under the menu button
+                    modifier = if (hasMenu) Modifier.padding(end = 36.dp) else Modifier,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                val preview = getPreviewBody(note)
+                if (preview.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        preview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        else Color(0xFF454559),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    formatNoteDate(note.updatedAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    else Color(0xFF626278)
+                )
             }
-            Spacer(Modifier.height(14.dp))
-            Text(
-                SimpleDateFormat(
-                    "dd MMM yyyy · hh:mm a",
-                    Locale.getDefault()
-                ).format(Date(note.updatedAt)),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                else Color(0xFF626278)
-            )
+
+            if (hasMenu) {
+                NoteOverflowMenu(
+                    actions = menuActions,
+                    dark = dark,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 12.dp, end = 4.dp)
+                )
+            }
         }
     }
+}
+
+/** The three-dot button of a note and the popup menu it opens. Every entry of [actions] is one item. */
+@Composable
+private fun NoteOverflowMenu(
+    actions: List<NoteMenuAction>,
+    dark: Boolean,
+    modifier: Modifier = Modifier
+) {
+    // Every note card has its own state, so each menu opens and closes on its own
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                Icons.Default.MoreVert,
+                contentDescription = "More options",
+                tint = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                else Color(0xFF454559)
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            for (action in actions) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            action.label,
+                            color = if (action.isDestructive) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        action.onClick()
+                    }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * "Delete note?" The note goes to the Trash, where it can be restored, so this is the same
+ * question in the editor and in the notes list.
+ */
+@Composable
+private fun DeleteNoteDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete note?", fontWeight = FontWeight.Bold) },
+        text = {
+            Text(
+                "This note will be moved to Trash. You can restore it within " +
+                    "$TRASH_RETENTION_DAYS days. After that it is deleted for good."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 // ----------------------------- Editor screen -------------------------------
@@ -1003,31 +1127,13 @@ fun EditorScreen(
     }
 
     if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete note?", fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "This note will be moved to Trash. You can restore it within " +
-                        "$TRASH_RETENTION_DAYS days. After that it is deleted for good."
-                )
+        DeleteNoteDialog(
+            onConfirm = {
+                confirmDelete = false
+                viewModel.deleteNote()
+                onClose()
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmDelete = false
-                        viewModel.deleteNote()
-                        onClose()
-                    }
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { confirmDelete = false }
         )
     }
 }
