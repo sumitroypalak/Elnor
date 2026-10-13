@@ -61,7 +61,6 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
@@ -353,7 +352,6 @@ fun ElnorApp(
     }
 
     val listState = rememberLazyListState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     if (editorOpen) {
         EditorScreen(
@@ -377,18 +375,25 @@ fun ElnorApp(
             onOpenTrash = onOpenTrash
         ) {
             Scaffold(
-                modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                 containerColor = bgColor,
                 topBar = {
-                    LargeTopAppBar(
+                    // A normal-height bar: the title and the menu button share one line, so there
+                    // is no empty space above the title. The 4.dp / 16.dp paddings put the title
+                    // and the menu button on the same 20.dp edges as the tagline and the search bar.
+                    TopAppBar(
                         title = {
-                            Text("Elnor", fontWeight = FontWeight.Bold)
+                            Text(
+                                "Elnor",
+                                modifier = Modifier.padding(start = 4.dp),
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold
+                            )
                         },
                         actions = {
                             // Hamburger button: opens the side menu (Settings, Trash)
                             FilledTonalIconButton(
                                 onClick = { drawerScope.launch { drawerState.open() } },
-                                modifier = Modifier.padding(end = 8.dp)
+                                modifier = Modifier.padding(end = 16.dp)
                             ) {
                                 Icon(Icons.Default.Menu, contentDescription = "Open menu")
                             }
@@ -396,8 +401,7 @@ fun ElnorApp(
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = bgColor,
                             scrolledContainerColor = bgColor
-                        ),
-                        scrollBehavior = scrollBehavior
+                        )
                     )
                 },
                 // The bottom bar floats over the list, in the place of the old "New note" button
@@ -447,7 +451,7 @@ fun ElnorApp(
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
                     )
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(12.dp))
 
                     OutlinedTextField(
                         value = search,
