@@ -17,6 +17,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -34,8 +36,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
@@ -45,10 +50,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -316,6 +323,7 @@ fun ElnorApp(
     val notes by repository.notes.collectAsState()
     var search by remember { mutableStateOf("") }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
+    var homeTab by rememberSaveable { mutableStateOf(HomeTab.NOTE) }
     var editingNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
     val editingNote = notes.firstOrNull { it.id == editingNoteId }
     // The note whose "Delete" was chosen in its three-dot menu (by id, never by list position)
@@ -336,10 +344,6 @@ fun ElnorApp(
     }
 
     val listState = rememberLazyListState()
-    // FAB shrinks to an icon while the list is scrolled
-    val fabExpanded by remember {
-        derivedStateOf { listState.firstVisibleItemIndex == 0 }
-    }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     if (editorOpen) {
@@ -351,6 +355,8 @@ fun ElnorApp(
     } else {
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val drawerScope = rememberCoroutineScope()
+        // Back from Task or Collection returns to Notes (registered first, so the menu below wins)
+        BackHandler(enabled = homeTab != HomeTab.NOTE) { homeTab = HomeTab.NOTE }
         // The Back button closes the side menu first
         BackHandler(enabled = drawerState.isOpen) {
             drawerScope.launch { drawerState.close() }
@@ -385,19 +391,40 @@ fun ElnorApp(
                         scrollBehavior = scrollBehavior
                     )
                 },
+                // The bottom bar floats over the list, in the place of the old "New note" button
                 floatingActionButton = {
-                    ExtendedFloatingActionButton(
-                        onClick = {
+                    ElnorBottomBar(
+                        selected = homeTab,
+                        dark = dark,
+                        onSelect = { homeTab = it },
+                        onNewNote = {
+                            homeTab = HomeTab.NOTE
                             editingNoteId = null
                             editorOpen = true
-                        },
-                        expanded = fabExpanded,
-                        icon = { Icon(Icons.Default.Add, contentDescription = "New note") },
-                        text = { Text("New note") },
-                        shape = MaterialTheme.shapes.extraLarge
+                        }
                     )
-                }
+                },
+                floatingActionButtonPosition = FabPosition.Center
             ) { padding ->
+                // Task and Collection are placeholders for now. Only Notes has content.
+                if (homeTab != HomeTab.NOTE) {
+                    if (homeTab == HomeTab.TASK) {
+                        HomeTabPlaceholder(
+                            emoji = "✅",
+                            title = "Tasks are coming soon",
+                            subtitle = "Your to-dos will live here.",
+                            padding = padding
+                        )
+                    } else {
+                        HomeTabPlaceholder(
+                            emoji = "🗂️",
+                            title = "Collections are coming soon",
+                            subtitle = "Group your notes and tasks here.",
+                            padding = padding
+                        )
+                    }
+                    return@Scaffold
+                }
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -524,6 +551,154 @@ fun ElnorApp(
                 onDismiss = { pendingDeleteId = null }
             )
         }
+    }
+}
+
+// ----------------------------- Bottom bar ----------------------------------
+
+/** The three tabs of the home screen, in the order they appear in the bottom bar. */
+private enum class HomeTab(val label: String, val icon: ImageVector) {
+    NOTE("Note", Icons.Default.Edit),
+    TASK("Task", Icons.Default.CheckCircle),
+    COLLECTION("Collection", Icons.AutoMirrored.Filled.List)
+}
+
+/**
+ * A dark pill with the three tabs and, next to it, a separate round "New note" button.
+ * Only the selected tab shows its icon and a highlight, so all three names fit on a small phone.
+ * Both parts are dark in the light and in the dark theme.
+ */
+@Composable
+private fun ElnorBottomBar(
+    selected: HomeTab,
+    dark: Boolean,
+    onSelect: (HomeTab) -> Unit,
+    onNewNote: () -> Unit
+) {
+    val barColor = if (dark) MaterialTheme.colorScheme.surface else Color(0xFF24243A)
+    val highlight =
+        if (dark) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary
+    val onBar = Color(0xFFE4E0FF)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Surface(
+            modifier = Modifier.weight(1f),
+            shape = CircleShape,
+            color = barColor,
+            shadowElevation = 6.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(6.dp)
+                    .selectableGroup(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (tab in HomeTab.entries) {
+                    BottomBarTab(
+                        tab = tab,
+                        selected = tab == selected,
+                        highlight = highlight,
+                        onBar = onBar,
+                        onClick = { onSelect(tab) }
+                    )
+                }
+            }
+        }
+
+        Surface(
+            onClick = onNewNote,
+            modifier = Modifier.size(56.dp),
+            shape = CircleShape,
+            color = barColor,
+            shadowElevation = 6.dp
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Add, contentDescription = "New note", tint = onBar)
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomBarTab(
+    tab: HomeTab,
+    selected: Boolean,
+    highlight: Color,
+    onBar: Color,
+    onClick: () -> Unit
+) {
+    val background by animateColorAsState(
+        targetValue = if (selected) highlight else Color.Transparent,
+        label = "tabBackground"
+    )
+
+    Row(
+        modifier = Modifier
+            .animateContentSize() // the highlight grows smoothly when the icon appears
+            .height(44.dp)
+            .clip(CircleShape)
+            .background(background)
+            .selectable(selected = selected, onClick = onClick, role = Role.Tab)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (selected) {
+            Icon(
+                tab.icon,
+                contentDescription = null,
+                tint = onBar,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            tab.label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
+            color = if (selected) onBar else onBar.copy(alpha = 0.72f),
+            maxLines = 1
+        )
+    }
+}
+
+/** Temporary screen for a tab that has no feature yet. Same look as the empty states. */
+@Composable
+private fun HomeTabPlaceholder(
+    emoji: String,
+    title: String,
+    subtitle: String,
+    padding: PaddingValues
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 80.dp), // centred above the floating bar
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(emoji, fontSize = 54.sp, lineHeight = 76.sp)
+        Spacer(Modifier.height(14.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+        )
     }
 }
 
