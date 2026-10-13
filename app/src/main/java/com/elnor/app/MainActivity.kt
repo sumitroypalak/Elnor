@@ -42,6 +42,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
@@ -453,6 +454,25 @@ fun ElnorApp(
 
                     Spacer(Modifier.height(12.dp))
 
+                    // A soft surface with a thin, low-contrast border. When the field is focused,
+                    // the border and the icons turn to the purple accent.
+                    val onSurface = MaterialTheme.colorScheme.onSurface
+                    val searchColors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = onSurface,
+                        unfocusedTextColor = onSurface,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        cursorColor = MaterialTheme.colorScheme.primary,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = onSurface.copy(alpha = 0.12f),
+                        focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                        unfocusedLeadingIconColor = onSurface.copy(alpha = 0.6f),
+                        focusedTrailingIconColor = onSurface.copy(alpha = 0.7f),
+                        unfocusedTrailingIconColor = onSurface.copy(alpha = 0.7f),
+                        focusedPlaceholderColor = onSurface.copy(alpha = 0.5f),
+                        unfocusedPlaceholderColor = onSurface.copy(alpha = 0.5f)
+                    )
+
                     OutlinedTextField(
                         value = search,
                         onValueChange = { search = it },
@@ -461,9 +481,20 @@ fun ElnorApp(
                         leadingIcon = {
                             Icon(Icons.Default.Search, contentDescription = null)
                         },
+                        // The clear button is only there while there is text
+                        trailingIcon = if (search.isNotEmpty()) {
+                            {
+                                IconButton(onClick = { search = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                }
+                            }
+                        } else {
+                            null
+                        },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge,
-                        shape = CircleShape
+                        shape = CircleShape,
+                        colors = searchColors
                     )
 
                     Spacer(Modifier.height(24.dp))
