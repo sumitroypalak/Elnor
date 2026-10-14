@@ -65,10 +65,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -80,6 +82,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.launch
@@ -167,7 +170,8 @@ private fun saveThemeMode(context: Context, mode: ThemeMode) {
 
 // ----------------------------- Activity & root -----------------------------
 
-class MainActivity : ComponentActivity() {
+// FragmentActivity (a ComponentActivity too) is needed by the system unlock dialog of the app lock
+class MainActivity : FragmentActivity() {
 
     // One editor ViewModel for the whole activity. It survives screen rotation.
     private val editorViewModel: NoteEditorViewModel by viewModels {
@@ -186,10 +190,23 @@ class MainActivity : ComponentActivity() {
                 Configuration.UI_MODE_NIGHT_YES
         applyWindowTheme(window, window.decorView, initialThemeMode.isDark(systemDark))
 
-        // Auto-save when the app goes to the background (Lifecycle ON_STOP)
+        // Reads the app lock settings. A cold start with the lock on starts locked.
+        AppLock.init(applicationContext)
+
         lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_STOP) editorViewModel.onStop()
+                when (event) {
+                    // Auto-save when the app goes to the background, and note when it left
+                    Lifecycle.Event.ON_STOP -> {
+                        editorViewModel.onStop()
+                        AppLock.onAppStopped()
+                    }
+                    // Back on screen: lock if it was away longer than "Automatically lock"
+                    Lifecycle.Event.ON_START -> AppLock.onAppStarted()
+                    // Ask the phone to unlock as soon as the locked app is visible
+                    Lifecycle.Event.ON_RESUME -> showUnlockPrompt(automatic = true)
+                    else -> Unit
+                }
             }
         )
 
@@ -200,20 +217,53 @@ class MainActivity : ComponentActivity() {
             ElnorRoot(
                 repository = repository,
                 editorViewModel = editorViewModel,
-                initialThemeMode = initialThemeMode
+                initialThemeMode = initialThemeMode,
+                onUnlockClick = { showUnlockPrompt(automatic = false) }
             )
         }
+    }
+
+    /**
+     * Opens the phone's unlock dialog when the app is locked. [automatic] is true when the app
+     * itself opens it (not the Unlock button): after the user cancelled it, it does not pop up
+     * again by itself until the app has been away once more.
+     */
+    private fun showUnlockPrompt(automatic: Boolean) {
+        if (!AppLock.locked.value || AppLock.promptShowing) return
+        if (automatic && !AppLock.autoPromptAllowed) return
+
+        if (!AppLockAuth.isAvailable(this)) {
+            // The phone's screen lock was removed after the app lock was turned on. Nothing is
+            // left to ask for, so the lock is turned off instead of locking the user out for good.
+            AppLock.setEnabled(applicationContext, false)
+            return
+        }
+
+        AppLock.promptShowing = true
+        AppLockAuth.authenticate(
+            activity = this,
+            title = "Unlock Elnor",
+            onSuccess = {
+                AppLock.promptShowing = false
+                AppLock.unlock()
+            },
+            onError = { userCancelled ->
+                AppLock.promptShowing = false
+                if (userCancelled) AppLock.autoPromptAllowed = false
+            }
+        )
     }
 }
 
 /** The screens the user can open from the home screen. */
-private enum class AppScreen { HOME, SETTINGS, TRASH }
+private enum class AppScreen { HOME, SETTINGS, TRASH, APP_LOCK }
 
 @Composable
 fun ElnorRoot(
     repository: NoteRepository,
     editorViewModel: NoteEditorViewModel,
-    initialThemeMode: ThemeMode
+    initialThemeMode: ThemeMode,
+    onUnlockClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     // Changes by itself when the phone switches between light and dark
@@ -221,38 +271,65 @@ fun ElnorRoot(
     var themeMode by remember { mutableStateOf(initialThemeMode) }
     val darkTheme = themeMode.isDark(systemDark)
     var screen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
+    val locked by AppLock.locked.collectAsState()
+    val appLockEnabled by AppLock.enabled.collectAsState()
+    val focusManager = LocalFocusManager.current
+
+    // The keyboard of an open note must not stay up over the lock screen
+    LaunchedEffect(locked) {
+        if (locked) focusManager.clearFocus(force = true)
+    }
 
     ElnorTheme(darkTheme = darkTheme) {
-        when (screen) {
-            AppScreen.SETTINGS -> {
-                BackHandler { screen = AppScreen.HOME }
-                SettingsScreen(
-                    themeMode = themeMode,
-                    onThemeModeChange = {
-                        themeMode = it
-                        saveThemeMode(context, it)
-                    },
-                    onBack = { screen = AppScreen.HOME }
-                )
+        Box(Modifier.fillMaxSize()) {
+            // The screens stay composed while locked (an open note is still there after unlocking),
+            // but they are hidden from touch and from screen readers by the lock screen above.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(if (locked) Modifier.clearAndSetSemantics { } else Modifier)
+            ) {
+                when (screen) {
+                    AppScreen.SETTINGS -> {
+                        BackHandler { screen = AppScreen.HOME }
+                        SettingsScreen(
+                            themeMode = themeMode,
+                            onThemeModeChange = {
+                                themeMode = it
+                                saveThemeMode(context, it)
+                            },
+                            appLockEnabled = appLockEnabled,
+                            onOpenAppLock = { screen = AppScreen.APP_LOCK },
+                            onBack = { screen = AppScreen.HOME }
+                        )
+                    }
+
+                    AppScreen.APP_LOCK -> {
+                        BackHandler { screen = AppScreen.SETTINGS }
+                        AppLockScreen(onBack = { screen = AppScreen.SETTINGS })
+                    }
+
+                    AppScreen.TRASH -> {
+                        BackHandler { screen = AppScreen.HOME }
+                        TrashScreen(
+                            repository = repository,
+                            onBack = { screen = AppScreen.HOME }
+                        )
+                    }
+
+                    AppScreen.HOME -> {
+                        ElnorApp(
+                            dark = darkTheme,
+                            repository = repository,
+                            editorViewModel = editorViewModel,
+                            onOpenSettings = { screen = AppScreen.SETTINGS },
+                            onOpenTrash = { screen = AppScreen.TRASH }
+                        )
+                    }
+                }
             }
 
-            AppScreen.TRASH -> {
-                BackHandler { screen = AppScreen.HOME }
-                TrashScreen(
-                    repository = repository,
-                    onBack = { screen = AppScreen.HOME }
-                )
-            }
-
-            AppScreen.HOME -> {
-                ElnorApp(
-                    dark = darkTheme,
-                    repository = repository,
-                    editorViewModel = editorViewModel,
-                    onOpenSettings = { screen = AppScreen.SETTINGS },
-                    onOpenTrash = { screen = AppScreen.TRASH }
-                )
-            }
+            if (locked) LockedScreen(onUnlock = onUnlockClick)
         }
     }
 }
@@ -1490,6 +1567,8 @@ fun EditorScreen(
 fun SettingsScreen(
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    appLockEnabled: Boolean,
+    onOpenAppLock: () -> Unit,
     onBack: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
@@ -1562,6 +1641,37 @@ fun SettingsScreen(
                     },
                     onDismiss = { showThemeDialog = false }
                 )
+            }
+
+            // ---- Privacy ----
+            SectionLabel("Privacy")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(role = Role.Button) { onOpenAppLock() }
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        "App lock",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (appLockEnabled) "On" else "Off",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    )
+                }
             }
 
             // ---- About developer ----
