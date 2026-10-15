@@ -33,4 +33,24 @@ class AutoLockTimeoutTest {
         assertEquals(AutoLockTimeout.IMMEDIATELY, AutoLockTimeout.fromStorage(null))
         assertEquals(AutoLockTimeout.IMMEDIATELY, AutoLockTimeout.fromStorage("unknown"))
     }
+
+    @Test
+    fun coldStart_respectsTheChosenTime() {
+        val left = 1_000_000L
+        // away 30 seconds
+        assertFalse(shouldLockOnColdStart(left, left + 30_000L, AutoLockTimeout.ONE_MINUTE))
+        assertFalse(shouldLockOnColdStart(left, left + 30_000L, AutoLockTimeout.THIRTY_MINUTES))
+        assertTrue(shouldLockOnColdStart(left, left + 30_000L, AutoLockTimeout.IMMEDIATELY))
+        // away 5 minutes
+        assertTrue(shouldLockOnColdStart(left, left + 5L * 60_000L, AutoLockTimeout.ONE_MINUTE))
+        assertFalse(shouldLockOnColdStart(left, left + 5L * 60_000L, AutoLockTimeout.THIRTY_MINUTES))
+        // away 30 minutes
+        assertTrue(shouldLockOnColdStart(left, left + 30L * 60_000L, AutoLockTimeout.THIRTY_MINUTES))
+    }
+
+    @Test
+    fun coldStart_locksWhenNothingWasSavedOrTheClockWentBack() {
+        assertTrue(shouldLockOnColdStart(0L, 5_000_000L, AutoLockTimeout.THIRTY_MINUTES))
+        assertTrue(shouldLockOnColdStart(2_000_000L, 1_000_000L, AutoLockTimeout.THIRTY_MINUTES))
+    }
 }

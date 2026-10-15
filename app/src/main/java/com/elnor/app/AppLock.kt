@@ -1,6 +1,7 @@
 package com.elnor.app
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.SystemClock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,21 @@ fun shouldLockAfterAway(awayMillis: Long, timeout: AutoLockTimeout): Boolean =
     awayMillis >= timeout.millis
 
 /**
+ * Should the app be locked when the process starts from nothing (the system closed it, or the
+ * user swiped it away)? [leftAtMillis] is the wall-clock time saved when the app left the screen.
+ *
+ * It locks when nothing was saved or the app was still on screen (0: it was closed while open, or
+ * while it was already locked), when the clock went backwards (a negative time away cannot be
+ * trusted), and when the app was away at least as long as [timeout].
+ */
+fun shouldLockOnColdStart(leftAtMillis: Long, nowMillis: Long, timeout: AutoLockTimeout): Boolean {
+    if (leftAtMillis <= 0L) return true
+    val away = nowMillis - leftAtMillis
+    if (away < 0L) return true
+    return shouldLockAfterAway(away, timeout)
+}
+
+/**
  * The state of the app lock. There is no PIN or password of our own: unlocking always asks the
  * phone itself (fingerprint, face, or the phone's screen-lock PIN / pattern / password).
  * See [AppLockAuth].
@@ -38,6 +54,13 @@ object AppLock {
     private const val SETTINGS_FILE = "elnor_settings"
     private const val KEY_ENABLED = "app_lock_enabled"
     private const val KEY_TIMEOUT = "app_lock_timeout"
+
+    /**
+     * Wall-clock time (milliseconds since 1970) when the app left the screen. It is saved on the
+     * phone because the process can be closed while the app is in the background, and the
+     * "Automatically lock" time must still count then. 0 means: on screen, or locked.
+     */
+    private const val KEY_LEFT_AT = "app_lock_left_at"
 
     private val _enabled = MutableStateFlow(false)
     private val _timeout = MutableStateFlow(AutoLockTimeout.IMMEDIATELY)
@@ -53,6 +76,7 @@ object AppLock {
     val locked: StateFlow<Boolean> = _locked.asStateFlow()
 
     private var initialized = false
+    private var prefs: SharedPreferences? = null
 
     /** SystemClock.elapsedRealtime() when the app left the screen. 0 = it did not leave. */
     private var leftAt = 0L
@@ -74,9 +98,16 @@ object AppLock {
         if (initialized) return
         initialized = true
         val prefs = context.applicationContext.getSharedPreferences(SETTINGS_FILE, Context.MODE_PRIVATE)
+        this.prefs = prefs
         _enabled.value = prefs.getBoolean(KEY_ENABLED, false)
         _timeout.value = AutoLockTimeout.fromStorage(prefs.getString(KEY_TIMEOUT, null))
-        _locked.value = _enabled.value
+        // A start from nothing is locked only if the app was away at least as long as the chosen
+        // "Automatically lock" time. (Before, it was always locked, so only "Immediately" worked.)
+        _locked.value = _enabled.value && shouldLockOnColdStart(
+            leftAtMillis = prefs.getLong(KEY_LEFT_AT, 0L),
+            nowMillis = System.currentTimeMillis(),
+            timeout = _timeout.value
+        )
     }
 
     fun setEnabled(context: Context, value: Boolean) {
@@ -98,10 +129,15 @@ object AppLock {
     fun onAppStopped() {
         leftAt = SystemClock.elapsedRealtime()
         autoPromptAllowed = true
+        // Saved for the case that the process is closed while the app is away. If the app is
+        // locked right now, 0 is saved: it must stay locked, whatever the time.
+        prefs?.edit()?.putLong(KEY_LEFT_AT, if (_locked.value) 0L else System.currentTimeMillis())?.apply()
     }
 
     /** The app came back (Lifecycle ON_START). Locks it if it was away long enough. */
     fun onAppStarted() {
+        // On screen again: if the process is closed from now on, the next start must be locked
+        prefs?.edit()?.putLong(KEY_LEFT_AT, 0L)?.apply()
         val left = leftAt
         if (left == 0L) return
         leftAt = 0L
