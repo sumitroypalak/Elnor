@@ -6,6 +6,7 @@ Features
 
 - Create notes
 - Edit notes
+- Undo and Redo buttons at the top of the note page (a word at a time)
 - "Last edited" date and time under the title of a note
 - Word and character count under the text of a note, e.g. "12 words · 68 characters" (works for Bengali too)
 - Copy the text of a note (copy button at the top of the note page: title and text go to the clipboard)

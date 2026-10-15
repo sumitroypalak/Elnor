@@ -79,6 +79,20 @@ class NoteEditorViewModel(
     private var session: Session? = null
     private var draftTitle = ""
     private var draftBody = ""
+    private var draftSelStart = 0
+    private var draftSelEnd = 0
+
+    // Undo / Redo. It lives here (not in the screen), so it survives rotating the phone.
+    // It is only used from the main thread.
+    private var history = EditHistory(EditSnapshot("", ""), now)
+    private val _canUndo = MutableStateFlow(false)
+    private val _canRedo = MutableStateFlow(false)
+
+    /** True when there is a change to take back (the Undo button is on). */
+    val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
+
+    /** True when an undone change can be brought back (the Redo button is on). */
+    val canRedo: StateFlow<Boolean> = _canRedo.asStateFlow()
 
     private val commands = Channel<Command>(Channel.UNLIMITED)
 
@@ -111,18 +125,68 @@ class NoteEditorViewModel(
         )
         draftTitle = note?.title ?: ""
         draftBody = note?.body ?: ""
+        draftSelStart = draftBody.length
+        draftSelEnd = draftBody.length
+        history = EditHistory(snapshot(), now) // a new page starts with an empty Undo memory
+        refreshHistoryFlags()
         _hasSavedNote.value = note != null
         _lastSavedAt.value = note?.updatedAt
     }
 
-    /** Called while typing. Only remembers the text, nothing is saved. */
+    /** Called while typing. Only remembers the text (and for Undo), nothing is saved. */
     fun onTitleChange(value: String) {
         draftTitle = value
+        recordForUndo()
     }
 
-    /** Called while typing. Only remembers the text, nothing is saved. */
-    fun onBodyChange(value: String) {
+    /**
+     * Called while typing. Only remembers the text (and for Undo), nothing is saved.
+     * [selStart] and [selEnd] are the cursor (or selection) in the text.
+     */
+    fun onBodyChange(value: String, selStart: Int = value.length, selEnd: Int = selStart) {
         draftBody = value
+        draftSelStart = selStart.coerceIn(0, value.length)
+        draftSelEnd = selEnd.coerceIn(0, value.length)
+        recordForUndo()
+    }
+
+    /**
+     * Takes back the last change. Returns what the page must show now (title, text and cursor),
+     * or null if there is nothing to take back. The remembered text is changed too, so what is
+     * saved is what is on the screen.
+     */
+    fun undo(): EditSnapshot? = applyFromHistory(if (session == null) null else history.undo())
+
+    /** Brings back the change that was taken back. Same result as [undo]. */
+    fun redo(): EditSnapshot? = applyFromHistory(if (session == null) null else history.redo())
+
+    private fun snapshot() = EditSnapshot(draftTitle, draftBody, draftSelStart, draftSelEnd)
+
+    private fun recordForUndo() {
+        if (session == null) return
+        history.record(snapshot())
+        refreshHistoryFlags()
+    }
+
+    private fun applyFromHistory(result: EditSnapshot?): EditSnapshot? {
+        if (result == null) return null
+        draftTitle = result.title
+        draftBody = result.body
+        draftSelStart = result.bodySelStart
+        draftSelEnd = result.bodySelEnd
+        refreshHistoryFlags()
+        return result
+    }
+
+    private fun refreshHistoryFlags() {
+        _canUndo.value = history.canUndo
+        _canRedo.value = history.canRedo
+    }
+
+    /** The page is closing: forget the changes, so the next page never starts with these buttons on. */
+    private fun clearHistory() {
+        history = EditHistory(EditSnapshot("", ""), now)
+        refreshHistoryFlags()
     }
 
     /** Back arrow or system back: save, and end the session. */
@@ -130,6 +194,7 @@ class NoteEditorViewModel(
         val current = session ?: return
         session = null
         _lastSavedAt.value = null // the page is closing: the next page must not start with this time
+        clearHistory()
         commands.trySend(Command.Save(current, draftTitle, draftBody))
     }
 
@@ -144,6 +209,7 @@ class NoteEditorViewModel(
         val current = session ?: return
         session = null
         _lastSavedAt.value = null
+        clearHistory()
         commands.trySend(Command.Delete(current))
     }
 

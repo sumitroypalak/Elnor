@@ -1505,6 +1505,22 @@ fun EditorScreen(
     // The delete button is only shown when the note exists in storage
     val canDelete by viewModel.hasSavedNote.collectAsState()
 
+    // Undo / Redo. The buttons are on only when there is something to take back / bring back.
+    val canUndo by viewModel.canUndo.collectAsState()
+    val canRedo by viewModel.canRedo.collectAsState()
+
+    // Shows a snapshot from the Undo memory on the page (title, text and cursor). The ViewModel
+    // has already changed the remembered text, so the next save is what is on the screen.
+    fun showSnapshot(snapshot: EditSnapshot?) {
+        if (snapshot == null) return
+        title = snapshot.title
+        val length = snapshot.body.length
+        bodyValue = TextFieldValue(
+            snapshot.body,
+            TextRange(snapshot.bodySelStart.coerceIn(0, length), snapshot.bodySelEnd.coerceIn(0, length))
+        )
+    }
+
     // "Last edited": the time of the last save. The ViewModel updates it at every save (also for a
     // note that was new when the page opened). Until the editing session has started, the time of
     // the note that was opened is used.
@@ -1520,7 +1536,7 @@ fun EditorScreen(
     LaunchedEffect(noteKey) {
         viewModel.open(note)
         viewModel.onTitleChange(title)
-        viewModel.onBodyChange(bodyValue.text)
+        viewModel.onBodyChange(bodyValue.text, bodyValue.selection.start, bodyValue.selection.end)
     }
 
     // Open the keyboard as soon as the page opens
@@ -1560,6 +1576,12 @@ fun EditorScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showSnapshot(viewModel.undo()) }, enabled = canUndo) {
+                        Icon(UndoIcon, contentDescription = "Undo")
+                    }
+                    IconButton(onClick = { showSnapshot(viewModel.redo()) }, enabled = canRedo) {
+                        Icon(RedoIcon, contentDescription = "Redo")
+                    }
                     // Copy: the title and the text that are on the screen now (also if not saved yet)
                     val copyText = noteTextForCopy(title, bodyValue.text)
                     if (copyText.isNotEmpty()) {
@@ -1633,7 +1655,7 @@ fun EditorScreen(
                 value = bodyValue,
                 onValueChange = {
                     bodyValue = it
-                    viewModel.onBodyChange(it.text) // only remembered, not saved
+                    viewModel.onBodyChange(it.text, it.selection.start, it.selection.end) // only remembered, not saved
                 },
                 modifier = Modifier
                     .fillMaxWidth()
