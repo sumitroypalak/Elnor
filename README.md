@@ -6,6 +6,7 @@ Features
 
 - Create notes
 - Edit notes
+- Copy the text of a note (copy button at the top of the note page: title and text go to the clipboard)
 - Pin notes: "Pin" in the three-dot menu of a note keeps it at the top of the list ("Unpin" to undo)
 - Show notes as a list or as a two-column grid (button next to "Your notes", remembered)
 - Delete notes (they go to the Trash first)

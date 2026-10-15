@@ -1487,6 +1487,7 @@ fun EditorScreen(
     }
     var confirmDelete by remember { mutableStateOf(false) }
     val bodyFocus = remember { FocusRequester() }
+    val context = LocalContext.current
 
     // The delete button is only shown when the note exists in storage
     val canDelete by viewModel.hasSavedNote.collectAsState()
@@ -1536,6 +1537,13 @@ fun EditorScreen(
                     }
                 },
                 actions = {
+                    // Copy: the title and the text that are on the screen now (also if not saved yet)
+                    val copyText = noteTextForCopy(title, bodyValue.text)
+                    if (copyText.isNotEmpty()) {
+                        IconButton(onClick = { copyTextToClipboard(context, copyText) }) {
+                            Icon(CopyIcon, contentDescription = "Copy note text")
+                        }
+                    }
                     if (canDelete) {
                         IconButton(onClick = { confirmDelete = true }) {
                             Icon(
