@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -1587,6 +1588,10 @@ fun EditorScreen(
                     if (copyText.isNotEmpty()) {
                         IconButton(onClick = { copyTextToClipboard(context, copyText) }) {
                             Icon(CopyIcon, contentDescription = "Copy note text")
+                        }
+                        // Share: opens Android's Share sheet with the same text as Copy
+                        IconButton(onClick = { shareNote(context, title, bodyValue.text) }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share note")
                         }
                     }
                     if (canDelete) {
