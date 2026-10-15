@@ -66,6 +66,15 @@ class NoteEditorViewModel(
     /** True when the open note exists in storage (the UI shows the delete button then). */
     val hasSavedNote: StateFlow<Boolean> = _hasSavedNote.asStateFlow()
 
+    private val _lastSavedAt = MutableStateFlow<Long?>(null)
+
+    /**
+     * The time of the last save of the open note (the updatedAt it got), or null if it was never
+     * saved. The editor shows it as "Last edited". It changes at every save, also for a note that
+     * was new when the page was opened.
+     */
+    val lastSavedAt: StateFlow<Long?> = _lastSavedAt.asStateFlow()
+
     @Volatile
     private var session: Session? = null
     private var draftTitle = ""
@@ -103,6 +112,7 @@ class NoteEditorViewModel(
         draftTitle = note?.title ?: ""
         draftBody = note?.body ?: ""
         _hasSavedNote.value = note != null
+        _lastSavedAt.value = note?.updatedAt
     }
 
     /** Called while typing. Only remembers the text, nothing is saved. */
@@ -119,6 +129,7 @@ class NoteEditorViewModel(
     fun onBack() {
         val current = session ?: return
         session = null
+        _lastSavedAt.value = null // the page is closing: the next page must not start with this time
         commands.trySend(Command.Save(current, draftTitle, draftBody))
     }
 
@@ -132,6 +143,7 @@ class NoteEditorViewModel(
     fun deleteNote() {
         val current = session ?: return
         session = null
+        _lastSavedAt.value = null
         commands.trySend(Command.Delete(current))
     }
 
@@ -168,30 +180,40 @@ class NoteEditorViewModel(
                 session.savedTitle = ""
                 session.savedBody = ""
                 publishHasSavedNote(session, false)
+                publishLastSavedAt(session, null)
             }
             return
         }
 
         if (id == null) {
             // First save of a new note. Keep the id so the next save is an update.
-            val newId = repository.insert(Note(id = 0L, title = title, body = body, updatedAt = now()))
+            val savedAt = now()
+            val newId = repository.insert(Note(id = 0L, title = title, body = body, updatedAt = savedAt))
             session.id = newId
             session.savedTitle = title
             session.savedBody = body
             publishHasSavedNote(session, true)
+            publishLastSavedAt(session, savedAt)
             return
         }
 
         if (title == session.savedTitle && body == session.savedBody) return // nothing changed
 
-        repository.update(Note(id = id, title = title, body = body, updatedAt = now()))
+        val savedAt = now()
+        repository.update(Note(id = id, title = title, body = body, updatedAt = savedAt))
         session.savedTitle = title
         session.savedBody = body
+        publishLastSavedAt(session, savedAt)
     }
 
     /** Only the page that is open now may change the flag (an older, closed page must not). */
     private fun publishHasSavedNote(from: Session, value: Boolean) {
         if (session === from) _hasSavedNote.value = value
+    }
+
+    /** Same rule as [publishHasSavedNote]: only the page that is open now may change the time. */
+    private fun publishLastSavedAt(from: Session, value: Long?) {
+        if (session === from) _lastSavedAt.value = value
     }
 
     companion object {

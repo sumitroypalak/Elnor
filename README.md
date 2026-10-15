@@ -6,6 +6,7 @@ Features
 
 - Create notes
 - Edit notes
+- "Last edited" date and time under the title of a note
 - Word and character count under the text of a note, e.g. "12 words · 68 characters" (works for Bengali too)
 - Copy the text of a note (copy button at the top of the note page: title and text go to the clipboard)
 - Pin notes: "Pin" in the three-dot menu of a note keeps it at the top of the list ("Unpin" to undo)

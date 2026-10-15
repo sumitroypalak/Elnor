@@ -1505,6 +1505,16 @@ fun EditorScreen(
     // The delete button is only shown when the note exists in storage
     val canDelete by viewModel.hasSavedNote.collectAsState()
 
+    // "Last edited": the time of the last save. The ViewModel updates it at every save (also for a
+    // note that was new when the page opened). Until the editing session has started, the time of
+    // the note that was opened is used.
+    val lastSavedAt by viewModel.lastSavedAt.collectAsState()
+    val openedAt = note?.updatedAt
+    // remember: the text is not rebuilt on every key that is typed
+    val lastEdited = remember(lastSavedAt, openedAt) {
+        lastEditedLabel(lastSavedAt ?: openedAt, ::formatNoteDate)
+    }
+
     // Start the editing session (nothing happens if it is already open, e.g. after rotation),
     // then give the ViewModel the text that is on screen.
     LaunchedEffect(noteKey) {
@@ -1605,6 +1615,18 @@ fun EditorScreen(
                 ),
                 colors = fieldColors
             )
+
+            // When the note was last saved (nothing for a note that was never saved)
+            if (lastEdited != null) {
+                Text(
+                    lastEdited,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                )
+            }
 
             // Body: fills the rest of the screen
             TextField(
