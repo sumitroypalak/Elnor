@@ -89,7 +89,10 @@ import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------------------
@@ -1489,6 +1492,16 @@ fun EditorScreen(
     val bodyFocus = remember { FocusRequester() }
     val context = LocalContext.current
 
+    // Word and character count of the whole note. The first value is calculated at once, then it
+    // is updated a moment after the typing stops, off the main thread, so a long note stays smooth.
+    var stats by remember { mutableStateOf(noteStats(title, bodyValue.text)) }
+    LaunchedEffect(title, bodyValue.text) {
+        val currentTitle = title
+        val currentBody = bodyValue.text
+        delay(150)
+        stats = withContext(Dispatchers.Default) { noteStats(currentTitle, currentBody) }
+    }
+
     // The delete button is only shown when the note exists in storage
     val canDelete by viewModel.hasSavedNote.collectAsState()
 
@@ -1613,6 +1626,16 @@ fun EditorScreen(
                     )
                 },
                 colors = fieldColors
+            )
+
+            // Word and character count, just above the keyboard
+            Text(
+                formatNoteStats(stats),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
             )
         }
     }
