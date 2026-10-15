@@ -6,6 +6,12 @@ import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
 /**
+ * The order of the home list and of search: pinned notes first (the most recently pinned on top),
+ * then the others, the most recently changed first.
+ */
+private const val LIST_ORDER = "pinnedAt IS NULL, pinnedAt DESC, updatedAt DESC"
+
+/**
  * A note is either a normal note (deletedAt IS NULL) or a note in the Trash (deletedAt is the
  * time it was deleted). Every query for the home list and for search only returns normal notes,
  * so a note in the Trash never shows up there.
@@ -13,10 +19,10 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface NoteDao {
 
-    @Query("SELECT * FROM notes WHERE deletedAt IS NULL ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM notes WHERE deletedAt IS NULL ORDER BY $LIST_ORDER")
     fun observeAll(): Flow<List<NoteEntity>>
 
-    @Query("SELECT * FROM notes WHERE deletedAt IS NULL ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM notes WHERE deletedAt IS NULL ORDER BY $LIST_ORDER")
     suspend fun getAll(): List<NoteEntity>
 
     /** Notes in the Trash, the most recently deleted first. */
@@ -30,7 +36,7 @@ interface NoteDao {
     @Query(
         "SELECT * FROM notes WHERE deletedAt IS NULL " +
             "AND searchText LIKE '%' || :escapedQuery || '%' ESCAPE '\\' " +
-            "ORDER BY updatedAt DESC"
+            "ORDER BY " + LIST_ORDER
     )
     fun search(escapedQuery: String): Flow<List<NoteEntity>>
 
@@ -55,9 +61,20 @@ interface NoteDao {
         searchText: String
     ): Int
 
-    /** Puts a normal note in the Trash. A note that is already there keeps its first deletedAt. */
-    @Query("UPDATE notes SET deletedAt = :deletedAt WHERE id = :id AND deletedAt IS NULL")
+    /**
+     * Puts a normal note in the Trash. A note that is already there keeps its first deletedAt.
+     * The note is unpinned, so a restored note comes back as a normal note.
+     */
+    @Query("UPDATE notes SET deletedAt = :deletedAt, pinnedAt = NULL WHERE id = :id AND deletedAt IS NULL")
     suspend fun moveToTrash(id: Long, deletedAt: Long)
+
+    /** Pins a normal note. A note that is already pinned keeps its place (its first pinnedAt). */
+    @Query("UPDATE notes SET pinnedAt = :pinnedAt WHERE id = :id AND deletedAt IS NULL AND pinnedAt IS NULL")
+    suspend fun pin(id: Long, pinnedAt: Long)
+
+    /** Takes the pin off. Title, body and updatedAt are not touched. */
+    @Query("UPDATE notes SET pinnedAt = NULL WHERE id = :id")
+    suspend fun unpin(id: Long)
 
     /** Takes a note out of the Trash. Title, body and updatedAt were never changed. */
     @Query("UPDATE notes SET deletedAt = NULL WHERE id = :id")

@@ -13,10 +13,20 @@ import org.json.JSONArray
  * Version 1: table "notes" with id, title, body, updatedAt.
  * Version 2: adds the searchText column (see SearchText).
  * Version 3: adds the deletedAt column (the Trash, see NoteEntity).
+ * Version 4: adds the pinnedAt column (pinned notes, see NoteEntity).
  */
-@Database(entities = [NoteEntity::class], version = 3, exportSchema = false)
+@Database(entities = [NoteEntity::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
+}
+
+/**
+ * Adds pinnedAt. It is empty (NULL) for every note that already exists, so no old note is pinned.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE notes ADD COLUMN pinnedAt INTEGER")
+    }
 }
 
 /**

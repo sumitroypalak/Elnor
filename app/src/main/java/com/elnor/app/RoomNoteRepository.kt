@@ -62,6 +62,10 @@ class RoomNoteRepository(
         dao.moveToTrash(id, now())
     }
 
+    override suspend fun setPinned(id: Long, pinned: Boolean) {
+        if (pinned) dao.pin(id, now()) else dao.unpin(id)
+    }
+
     override suspend fun restore(id: Long) {
         dao.restore(id)
     }
@@ -91,7 +95,7 @@ class RoomNoteRepository(
 
         private fun create(appContext: Context): RoomNoteRepository {
             val database = Room.databaseBuilder(appContext, AppDatabase::class.java, "elnor_notes_room.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .addCallback(LegacyNotesImport(appContext))
                 .build()
             return RoomNoteRepository(database.noteDao(), ApplicationScope.scope)

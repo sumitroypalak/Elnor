@@ -45,6 +45,12 @@ interface NoteRepository {
      */
     suspend fun moveToTrash(id: Long)
 
+    /**
+     * Pins ([pinned] = true) or unpins a note. Pinned notes are listed first. Pinning a pinned
+     * note, or a note in the Trash, does nothing. The text and updatedAt are not changed.
+     */
+    suspend fun setPinned(id: Long, pinned: Boolean)
+
     /** Takes the note out of the Trash, exactly as it was. Does nothing if it is not there. */
     suspend fun restore(id: Long)
 

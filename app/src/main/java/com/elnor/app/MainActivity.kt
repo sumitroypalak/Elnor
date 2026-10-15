@@ -109,7 +109,9 @@ data class Note(
     val title: String,
     val body: String,
     val updatedAt: Long,
-    val deletedAt: Long? = null
+    val deletedAt: Long? = null,
+    /** null for a normal note. A pinned note has the time it was pinned and is shown first. */
+    val pinnedAt: Long? = null
 )
 
 private const val UNTITLED_NOTE = "Untitled note"
@@ -665,6 +667,16 @@ fun ElnorApp(
                                     editorOpen = true
                                 },
                                 menuActions = listOf(
+                                    // Pinned notes are listed first. The list follows the repository,
+                                    // so it reorders by itself.
+                                    NoteMenuAction(
+                                        label = if (note.pinnedAt != null) "Unpin" else "Pin",
+                                        onClick = {
+                                            ApplicationScope.scope.launch {
+                                                repository.setPinned(note.id, note.pinnedAt == null)
+                                            }
+                                        }
+                                    ),
                                     NoteMenuAction(
                                         label = "Delete",
                                         isDestructive = true,
@@ -1355,12 +1367,19 @@ fun NoteCard(
                     )
                 }
                 Spacer(Modifier.height(14.dp))
-                Text(
-                    formatNoteDate(note.updatedAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                    else Color(0xFF626278)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // A small mark on a pinned note
+                    if (note.pinnedAt != null) {
+                        Text("\uD83D\uDCCC", fontSize = 12.sp)
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(
+                        formatNoteDate(note.updatedAt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (dark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                        else Color(0xFF626278)
+                    )
+                }
             }
 
             if (hasMenu) {

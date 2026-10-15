@@ -15,6 +15,9 @@ import androidx.room.PrimaryKey
  *   column gets the time of the deletion and the note is then "in the Trash". Nothing else
  *   of the note changes (title, body and updatedAt stay as they were), so restoring it puts
  *   everything back exactly as it was.
+ * - [pinnedAt] is null for a normal note. A pinned note has the time it was pinned. Pinned notes
+ *   are listed first (the most recently pinned on top). A note that goes to the Trash is unpinned.
+ *   Saving the text never changes it.
  */
 @Entity(tableName = "notes")
 data class NoteEntity(
@@ -23,11 +26,18 @@ data class NoteEntity(
     val body: String,
     val updatedAt: Long,
     val searchText: String,
-    val deletedAt: Long? = null
+    val deletedAt: Long? = null,
+    val pinnedAt: Long? = null
 )
 
-fun NoteEntity.toNote(): Note =
-    Note(id = id, title = title, body = body, updatedAt = updatedAt, deletedAt = deletedAt)
+fun NoteEntity.toNote(): Note = Note(
+    id = id,
+    title = title,
+    body = body,
+    updatedAt = updatedAt,
+    deletedAt = deletedAt,
+    pinnedAt = pinnedAt
+)
 
 fun Note.toEntity(): NoteEntity = NoteEntity(
     id = id,
@@ -35,5 +45,6 @@ fun Note.toEntity(): NoteEntity = NoteEntity(
     body = body,
     updatedAt = updatedAt,
     searchText = SearchText.build(title, body),
-    deletedAt = deletedAt
+    deletedAt = deletedAt,
+    pinnedAt = pinnedAt
 )
