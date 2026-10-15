@@ -89,7 +89,7 @@ fun AppLockScreen(onBack: () -> Unit) {
         containerColor = bgColor,
         topBar = {
             TopAppBar(
-                title = { Text("App lock") },
+                title = { Text("App lock", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -114,21 +114,23 @@ fun AppLockScreen(onBack: () -> Unit) {
                         onClick = { changeEnabled(!enabled) },
                         role = Role.Switch
                     )
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.Top
             ) {
                 Column(Modifier.weight(1f)) {
+                    // Same styles as the rows in Settings (title: titleMedium, text: bodyMedium)
                     Text(
                         "Unlock with biometric",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "When enabled, you'll need to use fingerprint, face or other unique " +
                             "identifiers to open Elnor.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
                     )
                 }
                 Spacer(Modifier.width(16.dp))
@@ -148,9 +150,10 @@ fun AppLockScreen(onBack: () -> Unit) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f))
                 Text(
                     "Automatically lock",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp)
                 )
                 Column(Modifier.selectableGroup()) {
                     for (option in AutoLockTimeout.entries) {
@@ -162,14 +165,14 @@ fun AppLockScreen(onBack: () -> Unit) {
                                     onClick = { AppLock.setTimeout(context, option) },
                                     role = Role.RadioButton
                                 )
-                                .padding(horizontal = 24.dp, vertical = 14.dp),
+                                .padding(horizontal = 20.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(selected = option == timeout, onClick = null)
-                            Spacer(Modifier.width(24.dp))
+                            Spacer(Modifier.width(16.dp))
                             Text(
                                 option.label(),
-                                style = MaterialTheme.typography.titleLarge,
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onBackground
                             )
                         }
@@ -253,7 +256,7 @@ fun LockedScreen(onUnlock: () -> Unit) {
             Text(
                 "Elnor is locked",
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Spacer(Modifier.height(8.dp))
