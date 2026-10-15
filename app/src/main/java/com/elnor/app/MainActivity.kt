@@ -29,6 +29,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -430,6 +434,11 @@ fun ElnorApp(
     }
 
     val listState = rememberLazyListState()
+    val gridState = rememberLazyStaggeredGridState()
+
+    // List (one note per row) or grid (two columns). Remembered on the phone.
+    val context = LocalContext.current
+    var viewMode by remember { mutableStateOf(loadNotesViewMode(context)) }
 
     if (editorOpen) {
         EditorScreen(
@@ -592,6 +601,21 @@ fun ElnorApp(
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        // The button shows the view it switches to
+                        IconButton(
+                            onClick = {
+                                viewMode = viewMode.toggled()
+                                saveNotesViewMode(context, viewMode)
+                            }
+                        ) {
+                            Icon(
+                                if (viewMode == NotesViewMode.LIST) GridViewIcon
+                                else Icons.AutoMirrored.Filled.List,
+                                contentDescription = if (viewMode == NotesViewMode.LIST)
+                                    "Switch to grid view" else "Switch to list view",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(14.dp))
@@ -623,36 +647,53 @@ fun ElnorApp(
                             )
                         }
                     } else {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(13.dp),
-                            contentPadding = PaddingValues(bottom = 100.dp)
-                        ) {
-                            items(visibleNotes, key = { it.id }) { note ->
-                                val originalIndex = notes.indexOfFirst { it.id == note.id }
-                                val cardColor = if (dark) {
-                                    MaterialTheme.colorScheme.surface
-                                } else {
-                                    cardColors[(originalIndex.coerceAtLeast(0)) % cardColors.size]
-                                }
+                        // One card, used by the list and by the grid
+                        val noteItem: @Composable (Note) -> Unit = { note ->
+                            val originalIndex = notes.indexOfFirst { it.id == note.id }
+                            val cardColor = if (dark) {
+                                MaterialTheme.colorScheme.surface
+                            } else {
+                                cardColors[(originalIndex.coerceAtLeast(0)) % cardColors.size]
+                            }
 
-                                NoteCard(
-                                    note = note,
-                                    cardColor = cardColor,
-                                    dark = dark,
-                                    onClick = {
-                                        editingNoteId = note.id
-                                        editorOpen = true
-                                    },
-                                    menuActions = listOf(
-                                        NoteMenuAction(
-                                            label = "Delete",
-                                            isDestructive = true,
-                                            onClick = { pendingDeleteId = note.id }
-                                        )
+                            NoteCard(
+                                note = note,
+                                cardColor = cardColor,
+                                dark = dark,
+                                onClick = {
+                                    editingNoteId = note.id
+                                    editorOpen = true
+                                },
+                                menuActions = listOf(
+                                    NoteMenuAction(
+                                        label = "Delete",
+                                        isDestructive = true,
+                                        onClick = { pendingDeleteId = note.id }
                                     )
                                 )
+                            )
+                        }
+
+                        if (viewMode == NotesViewMode.LIST) {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(13.dp),
+                                contentPadding = PaddingValues(bottom = 100.dp)
+                            ) {
+                                items(visibleNotes, key = { it.id }) { note -> noteItem(note) }
+                            }
+                        } else {
+                            // Two columns. Every card is as tall as its text, so they fit together.
+                            LazyVerticalStaggeredGrid(
+                                columns = StaggeredGridCells.Fixed(2),
+                                state = gridState,
+                                modifier = Modifier.weight(1f),
+                                verticalItemSpacing = 13.dp,
+                                horizontalArrangement = Arrangement.spacedBy(13.dp),
+                                contentPadding = PaddingValues(bottom = 100.dp)
+                            ) {
+                                items(visibleNotes, key = { it.id }) { note -> noteItem(note) }
                             }
                         }
                     }
