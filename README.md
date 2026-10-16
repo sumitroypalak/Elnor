@@ -11,6 +11,7 @@ Features
 - Word and character count under the text of a note, e.g. "12 words · 68 characters" (works for Bengali too)
 - Share a note (share button at the top of the note page: send the title and text to WhatsApp, e-mail, messages or any other app)
 - Copy the text of a note (copy button at the top of the note page: title and text go to the clipboard)
+- Side menu (hamburger button): large app name and outlined icon rows for Settings and Trash, with a rounded highlight on the pressed row
 - Pin notes: "Pin" in the three-dot menu of a note keeps it at the top of the list ("Unpin" to undo)
 - Show notes as a list or as a two-column grid (button next to "Your notes", remembered)
 - Delete notes (they go to the Trash first)

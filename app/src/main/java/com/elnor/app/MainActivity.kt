@@ -52,8 +52,9 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -1031,28 +1032,26 @@ private fun EndDrawer(
                     ModalDrawerSheet(
                         // rounded on the side that faces the screen, like the rest of the app
                         drawerShape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp),
-                        drawerContainerColor = MaterialTheme.colorScheme.surface
+                        drawerContainerColor = MaterialTheme.colorScheme.surface,
+                        drawerTonalElevation = 0.dp // a flat surface, no colour tint
                     ) {
+                        // A large app name at the top, then the entries as outlined icon + text rows
                         Text(
                             "Elnor",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)
+                            modifier = Modifier.padding(start = 24.dp, top = 20.dp, end = 24.dp, bottom = 24.dp)
                         )
-                        NavigationDrawerItem(
-                            label = { Text("Settings") },
-                            selected = false,
-                            onClick = onOpenSettings,
-                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                        DrawerItem(
+                            label = "Settings",
+                            icon = Icons.Outlined.Settings,
+                            onClick = onOpenSettings
                         )
-                        NavigationDrawerItem(
-                            label = { Text("Trash") },
-                            selected = false,
-                            onClick = onOpenTrash,
-                            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                        DrawerItem(
+                            label = "Trash",
+                            icon = Icons.Outlined.Delete,
+                            onClick = onOpenTrash
                         )
                     }
                 }
@@ -1064,6 +1063,43 @@ private fun EndDrawer(
             }
         )
     }
+}
+
+/**
+ * One row of the side menu: an outlined icon and the text, in a tall row with fully rounded
+ * ends. The row gets a strong, filled highlight (the "pill") while it is pressed.
+ */
+@Composable
+private fun DrawerItem(label: String, icon: ImageVector, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val colors = MaterialTheme.colorScheme
+
+    NavigationDrawerItem(
+        label = {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+        },
+        selected = pressed,
+        onClick = onClick,
+        icon = { Icon(icon, contentDescription = null) },
+        modifier = Modifier
+            .padding(horizontal = 12.dp)
+            .height(52.dp),
+        shape = CircleShape,
+        colors = NavigationDrawerItemDefaults.colors(
+            selectedContainerColor = colors.primaryContainer,
+            unselectedContainerColor = Color.Transparent,
+            selectedIconColor = colors.onPrimaryContainer,
+            unselectedIconColor = colors.onSurface,
+            selectedTextColor = colors.onPrimaryContainer,
+            unselectedTextColor = colors.onSurface
+        ),
+        interactionSource = interaction
+    )
 }
 
 // ----------------------------- Trash screen --------------------------------
