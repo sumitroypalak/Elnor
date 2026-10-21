@@ -83,6 +83,19 @@ class RoomNoteRepository(
     override suspend fun purgeExpiredTrash(): Int =
         dao.deleteTrashedUpTo(now() - TRASH_RETENTION_MS)
 
+    override suspend fun exportAll(): List<Note> =
+        dao.getEverything().map { it.toNote() }
+
+    // toEntity() builds searchText for every imported note, so search finds them at once.
+    override suspend fun importNotes(notes: List<Note>): ImportSummary {
+        val existing = dao.getEverything().map { it.toNote() }
+        val fresh = BackupFormat.selectNew(existing, notes)
+        if (fresh.isNotEmpty()) {
+            dao.insertAll(fresh.map { it.toEntity().copy(id = 0L) })
+        }
+        return ImportSummary(added = fresh.size, alreadyPresent = notes.size - fresh.size)
+    }
+
     companion object {
         @Volatile
         private var instance: RoomNoteRepository? = null

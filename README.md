@@ -17,6 +17,7 @@ Features
 - Delete notes (they go to the Trash first)
 - Trash: restore a note, delete it for good, or empty the Trash
 - Notes in the Trash are deleted automatically 30 days after they were moved there
+- Backup & restore (Settings > Backup & restore): save all notes (also the ones in the Trash) into one `.json` file in a place you choose, and add the notes of such a file back. Restoring only adds notes: nothing that exists is changed, and importing the same file twice makes no copies. The file is not encrypted.
 - App lock: unlock with fingerprint, face or the phone's own screen-lock PIN (Settings > App lock). It locks immediately, after 1 minute or after 30 minutes. Elnor has no PIN of its own.
 
 About

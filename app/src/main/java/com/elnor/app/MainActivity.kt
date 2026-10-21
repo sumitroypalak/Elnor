@@ -267,7 +267,7 @@ class MainActivity : FragmentActivity() {
 }
 
 /** The screens the user can open from the home screen. */
-private enum class AppScreen { HOME, SETTINGS, TRASH, APP_LOCK }
+private enum class AppScreen { HOME, SETTINGS, TRASH, APP_LOCK, BACKUP }
 
 @Composable
 fun ElnorRoot(
@@ -311,7 +311,16 @@ fun ElnorRoot(
                             },
                             appLockEnabled = appLockEnabled,
                             onOpenAppLock = { screen = AppScreen.APP_LOCK },
+                            onOpenBackup = { screen = AppScreen.BACKUP },
                             onBack = { screen = AppScreen.HOME }
+                        )
+                    }
+
+                    AppScreen.BACKUP -> {
+                        BackHandler { screen = AppScreen.SETTINGS }
+                        BackupScreen(
+                            repository = repository,
+                            onBack = { screen = AppScreen.SETTINGS }
                         )
                     }
 
@@ -1745,6 +1754,7 @@ fun SettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     appLockEnabled: Boolean,
     onOpenAppLock: () -> Unit,
+    onOpenBackup: () -> Unit,
     onBack: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
@@ -1817,6 +1827,37 @@ fun SettingsScreen(
                     },
                     onDismiss = { showThemeDialog = false }
                 )
+            }
+
+            // ---- Data ----
+            SectionLabel("Data")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(role = Role.Button) { onOpenBackup() }
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        "Backup & restore",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Save your notes to a file, or add them back",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    )
+                }
             }
 
             // ---- Privacy ----

@@ -60,6 +60,17 @@ interface NoteRepository {
     /** Removes every note in the Trash for good. */
     suspend fun emptyTrash()
 
+    /** Every note for the backup file: normal notes and notes in the Trash. */
+    suspend fun exportAll(): List<Note>
+
+    /**
+     * Adds the notes of a backup. It only adds: notes that are already stored (same title, text
+     * and updatedAt) are skipped, and nothing that exists is changed or removed. The ids in
+     * [notes] are ignored, every added note gets a new id. pinnedAt and deletedAt are kept, so a
+     * note that was in the Trash stays there until its 30 days are over.
+     */
+    suspend fun importNotes(notes: List<Note>): ImportSummary
+
     /**
      * Removes for good every note that has been in the Trash for [TRASH_RETENTION_DAYS] days or
      * longer, counted from the time it was moved there (its deletedAt). Notes that are not in
