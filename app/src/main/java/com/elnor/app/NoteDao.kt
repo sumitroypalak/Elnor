@@ -95,4 +95,15 @@ interface NoteDao {
      */
     @Query("DELETE FROM notes WHERE deletedAt IS NOT NULL AND deletedAt <= :cutoff")
     suspend fun deleteTrashedUpTo(cutoff: Long): Int
+
+    /** Every note, normal and in the Trash. Only the backup uses this. */
+    @Query("SELECT * FROM notes ORDER BY updatedAt DESC")
+    suspend fun getEverything(): List<NoteEntity>
+
+    /**
+     * Inserts all rows in one transaction: either every note is added or none. Only the backup
+     * import uses this. The ids must be 0 so Room gives new ones and nothing is overwritten.
+     */
+    @Insert
+    suspend fun insertAll(notes: List<NoteEntity>)
 }
