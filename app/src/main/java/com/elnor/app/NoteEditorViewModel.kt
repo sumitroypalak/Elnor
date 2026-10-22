@@ -4,9 +4,12 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,12 +19,17 @@ import kotlinx.coroutines.launch
  * Auto-save for the note editor. There is no Save button.
  *
  * The text is only kept in memory while the user types (no save on every key).
- * It is written to the [repository] only when:
+ * It is written to the [repository] when:
+ *  - the user stops typing for [autoSaveDelayMs] (a short pause, see [scheduleAutoSave]).
+ *    Every new change restarts the wait, so a save happens only after a pause, never per key
  *  - [onBack]: the back arrow or the system back was pressed
  *  - [onStop]: the app went to the background (Lifecycle ON_STOP)
  *
  * Rules:
  *  - A new note whose title and body are both blank is never saved.
+ *  - A pause-save never moves a note to the Trash. If the user clears the whole text and
+ *    pauses, nothing happens yet (they may be about to type something else). Only [onBack] and
+ *    [onStop] do that, as before.
  *  - The first save of a new note is an insert. The id that comes back is kept in the
  *    session, so every later save of that note is an update. No second copy is created.
  *  - An existing note that was changed is updated and gets a new updatedAt.
@@ -41,12 +49,21 @@ import kotlinx.coroutines.launch
  * duplicate insert impossible. [onCleared] only closes the queue. The coroutine still
  * finishes everything that is already in it.
  *
+ * The pause timer runs in [timerScope] (the ViewModel's own scope by default, main thread), so the
+ * draft text is only ever read on one thread. It does not write anything itself: after the pause
+ * it puts a normal save into the same queue as above. If the ViewModel is cleared first, the timer
+ * is cancelled, and that is fine because [onBack] has already queued the final save.
+ *
  * @param now clock for updatedAt. Replaced in tests.
+ * @param autoSaveDelayMs how long the user must stop typing before the text is saved.
+ * @param timerScope scope of the pause timer. Null = viewModelScope. Replaced in tests.
  */
 class NoteEditorViewModel(
     private val repository: NoteRepository,
     saveScope: CoroutineScope,
-    private val now: () -> Long = { System.currentTimeMillis() }
+    private val now: () -> Long = { System.currentTimeMillis() },
+    private val autoSaveDelayMs: Long = AUTO_SAVE_DELAY_MS,
+    private val timerScope: CoroutineScope? = null
 ) : ViewModel() {
 
     /** One open editor page. [id] is null until a new note was inserted. */
@@ -57,9 +74,19 @@ class NoteEditorViewModel(
     )
 
     private sealed interface Command {
-        class Save(val session: Session, val title: String, val body: String) : Command
+        /** [fromPause] = true: saved after a typing pause, so a blank text never goes to the Trash. */
+        class Save(
+            val session: Session,
+            val title: String,
+            val body: String,
+            val fromPause: Boolean = false
+        ) : Command
+
         class Delete(val session: Session) : Command
     }
+
+    /** The waiting timer of the pause-save. Only used from the main thread. */
+    private var autoSaveJob: Job? = null
 
     private val _hasSavedNote = MutableStateFlow(false)
 
@@ -133,14 +160,15 @@ class NoteEditorViewModel(
         _lastSavedAt.value = note?.updatedAt
     }
 
-    /** Called while typing. Only remembers the text (and for Undo), nothing is saved. */
+    /** Called while typing. Remembers the text (and for Undo). It is saved after a typing pause. */
     fun onTitleChange(value: String) {
         draftTitle = value
         recordForUndo()
+        scheduleAutoSave()
     }
 
     /**
-     * Called while typing. Only remembers the text (and for Undo), nothing is saved.
+     * Called while typing. Remembers the text (and for Undo). It is saved after a typing pause.
      * [selStart] and [selEnd] are the cursor (or selection) in the text.
      */
     fun onBodyChange(value: String, selStart: Int = value.length, selEnd: Int = selStart) {
@@ -148,6 +176,27 @@ class NoteEditorViewModel(
         draftSelStart = selStart.coerceIn(0, value.length)
         draftSelEnd = selEnd.coerceIn(0, value.length)
         recordForUndo()
+        scheduleAutoSave()
+    }
+
+    /**
+     * (Re)starts the pause timer. Each change cancels the one before, so the text is saved only
+     * when the user has stopped for [autoSaveDelayMs]. The save goes through the normal queue.
+     */
+    private fun scheduleAutoSave() {
+        val current = session ?: return
+        autoSaveJob?.cancel()
+        autoSaveJob = (timerScope ?: viewModelScope).launch {
+            delay(autoSaveDelayMs)
+            // The page may have closed or a new one opened while we waited
+            if (session !== current) return@launch
+            commands.trySend(Command.Save(current, draftTitle, draftBody, fromPause = true))
+        }
+    }
+
+    private fun cancelAutoSave() {
+        autoSaveJob?.cancel()
+        autoSaveJob = null
     }
 
     /**
@@ -175,6 +224,7 @@ class NoteEditorViewModel(
         draftSelStart = result.bodySelStart
         draftSelEnd = result.bodySelEnd
         refreshHistoryFlags()
+        scheduleAutoSave() // Undo / Redo changes the text too
         return result
     }
 
@@ -193,6 +243,7 @@ class NoteEditorViewModel(
     fun onBack() {
         val current = session ?: return
         session = null
+        cancelAutoSave() // this save is the final one
         _lastSavedAt.value = null // the page is closing: the next page must not start with this time
         clearHistory()
         commands.trySend(Command.Save(current, draftTitle, draftBody))
@@ -201,6 +252,7 @@ class NoteEditorViewModel(
     /** App went to the background: save, and keep the session open. */
     fun onStop() {
         val current = session ?: return
+        cancelAutoSave() // saved right now, no need to wait for the pause
         commands.trySend(Command.Save(current, draftTitle, draftBody))
     }
 
@@ -208,6 +260,7 @@ class NoteEditorViewModel(
     fun deleteNote() {
         val current = session ?: return
         session = null
+        cancelAutoSave() // a waiting pause-save must not bring the note back
         _lastSavedAt.value = null
         clearHistory()
         commands.trySend(Command.Delete(current))
@@ -222,7 +275,12 @@ class NoteEditorViewModel(
 
     private suspend fun handle(command: Command) {
         when (command) {
-            is Command.Save -> persist(command.session, command.title, command.body)
+            is Command.Save -> persist(
+                command.session,
+                command.title,
+                command.body,
+                trashWhenBlank = !command.fromPause
+            )
             is Command.Delete -> {
                 val id = command.session.id
                 if (id != null) repository.moveToTrash(id)
@@ -231,14 +289,20 @@ class NoteEditorViewModel(
         }
     }
 
-    private suspend fun persist(session: Session, rawTitle: String, rawBody: String) {
+    private suspend fun persist(
+        session: Session,
+        rawTitle: String,
+        rawBody: String,
+        trashWhenBlank: Boolean = true
+    ) {
         val title = rawTitle.trim()
         val body = rawBody.trim()
         val id = session.id
 
         // Nothing written: a blank note is not worth saving ...
         if (title.isBlank() && body.isBlank()) {
-            if (id != null) {
+            // A pause-save leaves an emptied note alone (the user may still be typing)
+            if (id != null && trashWhenBlank) {
                 // ... and an existing note that was emptied leaves the list. It goes to the
                 // Trash with the text that was last saved, so nothing is lost for good.
                 repository.moveToTrash(id)
@@ -283,6 +347,9 @@ class NoteEditorViewModel(
     }
 
     companion object {
+        /** How long the user must stop typing before the text is saved (milliseconds). */
+        const val AUTO_SAVE_DELAY_MS = 2_000L
+
         /** Creates the ViewModel with the real storage (Room) and the application-level scope. */
         fun factory(context: Context): ViewModelProvider.Factory {
             val appContext = context.applicationContext
