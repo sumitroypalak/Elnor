@@ -5,6 +5,7 @@ package com.elnor.app
 import android.app.Activity
 import android.content.res.Configuration
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -23,6 +24,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------------------
 // ✏️ DEVELOPER INFO — change these 4 lines to your own details
@@ -56,6 +59,15 @@ class MainActivity : FragmentActivity() {
         // Reads the app lock settings. A cold start with the lock on starts locked.
         AppLock.init(applicationContext)
 
+        // While the App lock is on, the window is secure: the Recent Apps thumbnail is blank and
+        // screenshots / screen recording are blocked. It is set before the first frame, and
+        // follows the switch in Settings > App lock at once (the app is not locked yet at the
+        // moment it goes to the background, so the lock screen alone cannot hide the note).
+        updateSecureWindow(AppLock.enabled.value)
+        lifecycleScope.launch {
+            AppLock.enabled.collect { updateSecureWindow(it) }
+        }
+
         lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
                 when (event) {
@@ -83,6 +95,15 @@ class MainActivity : FragmentActivity() {
                 initialThemeMode = initialThemeMode,
                 onUnlockClick = { showUnlockPrompt(automatic = false) }
             )
+        }
+    }
+
+    /** FLAG_SECURE on = blank Recent Apps thumbnail and no screenshots. Only while the App lock is on. */
+    private fun updateSecureWindow(secure: Boolean) {
+        if (secure) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
     }
 
