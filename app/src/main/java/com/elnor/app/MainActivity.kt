@@ -73,7 +73,7 @@ class MainActivity : FragmentActivity() {
                 when (event) {
                     // Auto-save when the app goes to the background, and note when it left
                     Lifecycle.Event.ON_STOP -> {
-                        editorViewModel.onStop()
+                        editorViewModel.onStop(waitForNewNote = true)
                         AppLock.onAppStopped()
                     }
                     // Back on screen: lock if it was away longer than "Automatically lock"
