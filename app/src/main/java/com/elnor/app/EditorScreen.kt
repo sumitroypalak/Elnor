@@ -178,7 +178,7 @@ fun EditorScreen(
                 value = title,
                 onValueChange = {
                     title = it
-                    viewModel.onTitleChange(it) // only remembered, not saved
+                    viewModel.onTitleChange(it) // saved after a typing pause
                 },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -217,7 +217,7 @@ fun EditorScreen(
                 value = bodyValue,
                 onValueChange = {
                     bodyValue = it
-                    viewModel.onBodyChange(it.text, it.selection.start, it.selection.end) // only remembered, not saved
+                    viewModel.onBodyChange(it.text, it.selection.start, it.selection.end) // saved after a typing pause
                 },
                 modifier = Modifier
                     .fillMaxWidth()
