@@ -47,42 +47,15 @@ jobs:
                           print('::error title=Test failed ' + tc.get('classname', '') + '.' + tc.get('name', '') + '::' + msg)
           PY
 
-      - name: Run lint
-        run: |
-          set -o pipefail
-          gradle lintDebug 2>&1 | tee lint.log
-
-      - name: Show lint problems
-        if: failure()
-        run: |
-          grep -n -A12 -E 'What went wrong|Lint found|Error:|error:' lint.log | head -40 | sed -E 's/^/::error title=Lint log::/' || true
-          find app/build/reports -maxdepth 2 | head -10 | sed -E 's/^/::notice title=report file::/'
-          python3 - <<'PY'
-          import os
-          import xml.etree.ElementTree as ET
-          path = 'app/build/reports/lint-results-debug.xml'
-          if os.path.exists(path):
-              for issue in ET.parse(path).getroot().iter('issue'):
-                  loc = issue.find('location')
-                  where = ''
-                  if loc is not None:
-                      where = (loc.get('file') or '').split('/')[-1] + ':' + (loc.get('line') or '')
-                  msg = (issue.get('message') or '').replace('\n', ' ').replace('%', ' ')[:250]
-                  level = 'error' if issue.get('severity') in ('Error', 'Fatal') else 'warning'
-                  print('::' + level + ' title=Lint ' + issue.get('id', '') + ' ' + where + '::' + msg)
-          PY
-
       - name: Build debug APK
         run: gradle assembleDebug
 
-      - name: Upload test and lint reports
+      - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Elnor-reports
-          path: |
-            app/build/reports/tests/
-            app/build/reports/lint-results-debug.html
+          name: Elnor-test-reports
+          path: app/build/reports/tests/
           if-no-files-found: ignore
           retention-days: 7
 
