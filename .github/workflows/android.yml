@@ -28,7 +28,24 @@ jobs:
           gradle-version: '8.9'
 
       - name: Run unit tests
-        run: gradle testDebugUnitTest
+        run: |
+          set -o pipefail
+          gradle testDebugUnitTest 2>&1 | tee test.log
+
+      - name: Show test failures and compile errors
+        if: failure()
+        run: |
+          grep -E '^e: ' test.log | head -30 | sed -E 's/^/::error title=Kotlin compile error::/' || true
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+          for f in glob.glob('app/build/test-results/testDebugUnitTest/*.xml'):
+              for tc in ET.parse(f).getroot().iter('testcase'):
+                  for kind in ('failure', 'error'):
+                      for e in tc.findall(kind):
+                          msg = (e.get('message') or '')[:300].replace('\n', ' ').replace('%', ' ')
+                          print('::error title=Test failed ' + tc.get('classname', '') + '.' + tc.get('name', '') + '::' + msg)
+          PY
 
       - name: Run lint
         run: gradle lintDebug
