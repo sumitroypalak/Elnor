@@ -50,6 +50,24 @@ jobs:
       - name: Run lint
         run: gradle lintDebug
 
+      - name: Show lint problems
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          path = 'app/build/reports/lint-results-debug.xml'
+          if os.path.exists(path):
+              for issue in ET.parse(path).getroot().iter('issue'):
+                  loc = issue.find('location')
+                  where = ''
+                  if loc is not None:
+                      where = (loc.get('file') or '').split('/')[-1] + ':' + (loc.get('line') or '')
+                  msg = (issue.get('message') or '').replace('\n', ' ').replace('%', ' ')[:250]
+                  level = 'error' if issue.get('severity') in ('Error', 'Fatal') else 'warning'
+                  print('::' + level + ' title=Lint ' + issue.get('id', '') + ' ' + where + '::' + msg)
+          PY
+
       - name: Build debug APK
         run: gradle assembleDebug
 
