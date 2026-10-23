@@ -290,8 +290,6 @@ fun ElnorApp(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            Text("📝", fontSize = 54.sp, lineHeight = 76.sp)
-                            Spacer(Modifier.height(14.dp))
                             Text(
                                 if (search.isBlank()) "Your space is empty"
                                 else "No notes found",
