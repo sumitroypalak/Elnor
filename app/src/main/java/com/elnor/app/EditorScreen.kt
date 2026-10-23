@@ -147,7 +147,10 @@ fun EditorScreen(
                             Icon(CopyIcon, contentDescription = "Copy note text")
                         }
                         // Share: opens Android's Share sheet with the same text as Copy
-                        IconButton(onClick = { shareNote(context, title, bodyValue.text) }) {
+                        IconButton(onClick = {
+                            AppLock.expectExternalScreen() // the Share sheet is not "leaving" Elnor
+                            shareNote(context, title, bodyValue.text)
+                        }) {
                             Icon(Icons.Default.Share, contentDescription = "Share note")
                         }
                     }

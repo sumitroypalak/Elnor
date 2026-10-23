@@ -53,4 +53,33 @@ class AutoLockTimeoutTest {
         assertTrue(shouldLockOnColdStart(0L, 5_000_000L, AutoLockTimeout.THIRTY_MINUTES))
         assertTrue(shouldLockOnColdStart(2_000_000L, 1_000_000L, AutoLockTimeout.THIRTY_MINUTES))
     }
+
+    // ---- Coming back from Elnor's own Share sheet / file picker ----
+
+    @Test
+    fun returnFromOwnScreen_doesNotLock_withImmediately() {
+        assertFalse(shouldLockOnReturn(5_000L, AutoLockTimeout.IMMEDIATELY, 5_000L))
+        assertFalse(shouldLockOnReturn(EXTERNAL_SCREEN_GRACE_MS, AutoLockTimeout.IMMEDIATELY, EXTERNAL_SCREEN_GRACE_MS))
+    }
+
+    @Test
+    fun returnFromOwnScreen_locksAgainAfterTheGraceTime() {
+        assertTrue(
+            shouldLockOnReturn(
+                EXTERNAL_SCREEN_GRACE_MS + 1, AutoLockTimeout.IMMEDIATELY, EXTERNAL_SCREEN_GRACE_MS + 1
+            )
+        )
+    }
+
+    @Test
+    fun withoutOwnScreen_theNormalRuleDecides() {
+        assertTrue(shouldLockOnReturn(0L, AutoLockTimeout.IMMEDIATELY, null))
+        assertFalse(shouldLockOnReturn(59_999L, AutoLockTimeout.ONE_MINUTE, null))
+        assertTrue(shouldLockOnReturn(60_000L, AutoLockTimeout.ONE_MINUTE, null))
+    }
+
+    @Test
+    fun aClockThatWentBackwards_isNotTrusted() {
+        assertTrue(shouldLockOnReturn(5_000L, AutoLockTimeout.IMMEDIATELY, -1L))
+    }
 }
