@@ -31,9 +31,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // ----------------------------- Notes screen --------------------------------
+
+/** How long the user must stop typing in the search field before the search runs (milliseconds). */
+private const val SEARCH_DEBOUNCE_MS = 200L
 
 @Composable
 fun ElnorApp(
@@ -63,7 +67,11 @@ fun ElnorApp(
     // Search runs in the database, on the normalized searchText column.
     // The old list stays on screen until the new result arrives (no flicker while typing).
     var visibleNotes by remember { mutableStateOf(notes) }
+    // Debounce: every new letter restarts this effect (the old run is cancelled), so the database
+    // is asked only after the user stopped typing for SEARCH_DEBOUNCE_MS. An empty search (start,
+    // or the clear button) is answered at once.
     LaunchedEffect(search) {
+        if (search.isNotBlank()) delay(SEARCH_DEBOUNCE_MS)
         repository.search(search).collect { visibleNotes = it }
     }
 
