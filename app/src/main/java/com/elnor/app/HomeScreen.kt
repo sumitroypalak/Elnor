@@ -284,11 +284,12 @@ fun ElnorApp(
                     } else {
                         // One card, used by the list and by the grid
                         val noteItem: @Composable (Note) -> Unit = { note ->
-                            val originalIndex = notes.indexOfFirst { it.id == note.id }
+                            // The color comes from the note's id, not from its place in the list,
+                            // so it stays the same when notes are added, pinned or searched
                             val cardColor = if (dark) {
                                 MaterialTheme.colorScheme.surface
                             } else {
-                                cardColors[(originalIndex.coerceAtLeast(0)) % cardColors.size]
+                                cardColors[cardColorIndex(note.id, cardColors.size)]
                             }
 
                             NoteCard(
