@@ -277,7 +277,6 @@ private fun BottomBarTab(
 /** Temporary screen for a tab that has no feature yet. Same look as the empty states. */
 @Composable
 internal fun HomeTabPlaceholder(
-    emoji: String,
     title: String,
     subtitle: String,
     padding: PaddingValues
@@ -291,8 +290,6 @@ internal fun HomeTabPlaceholder(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(emoji, fontSize = 54.sp, lineHeight = 76.sp)
-        Spacer(Modifier.height(14.dp))
         Text(
             title,
             style = MaterialTheme.typography.titleLarge,

@@ -161,14 +161,12 @@ fun ElnorApp(
                 if (homeTab != HomeTab.NOTE) {
                     if (homeTab == HomeTab.TASK) {
                         HomeTabPlaceholder(
-                            emoji = "✅",
                             title = "Tasks are coming soon",
                             subtitle = "Your to-dos will live here.",
                             padding = padding
                         )
                     } else {
                         HomeTabPlaceholder(
-                            emoji = "🗂️",
                             title = "Collections are coming soon",
                             subtitle = "Group your notes and tasks here.",
                             padding = padding
