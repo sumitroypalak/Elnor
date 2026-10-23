@@ -28,6 +28,32 @@ fun shouldLockAfterAway(awayMillis: Long, timeout: AutoLockTimeout): Boolean =
     awayMillis >= timeout.millis
 
 /**
+ * How long after Elnor itself opened another screen (the Share sheet, the file picker of the
+ * backup) coming back does not lock the app, even with "Immediately". Longer than that, the
+ * normal rule applies again, so a phone that was left in the picker does not stay open for good.
+ */
+const val EXTERNAL_SCREEN_GRACE_MS = 2L * 60_000L
+
+/**
+ * Should the app be locked when it comes back to the screen?
+ *
+ * [externalScreenAgeMillis] is how long ago Elnor opened its own Share sheet or file picker (see
+ * [AppLock.expectExternalScreen]), or null if it did not. Coming back from such a screen within
+ * [EXTERNAL_SCREEN_GRACE_MS] does not lock: the user never really left Elnor. In every other
+ * case the usual "Automatically lock" rule decides.
+ */
+fun shouldLockOnReturn(
+    awayMillis: Long,
+    timeout: AutoLockTimeout,
+    externalScreenAgeMillis: Long?
+): Boolean {
+    if (externalScreenAgeMillis != null && externalScreenAgeMillis in 0L..EXTERNAL_SCREEN_GRACE_MS) {
+        return false
+    }
+    return shouldLockAfterAway(awayMillis, timeout)
+}
+
+/**
  * Should the app be locked when the process starts from nothing (the system closed it, or the
  * user swiped it away)? [leftAtMillis] is the wall-clock time saved when the app left the screen.
  *
@@ -81,6 +107,13 @@ object AppLock {
     /** SystemClock.elapsedRealtime() when the app left the screen. 0 = it did not leave. */
     private var leftAt = 0L
 
+    /**
+     * SystemClock.elapsedRealtime() when Elnor opened its own Share sheet or file picker, or 0.
+     * It is only kept in memory: if the process is closed meanwhile, the next start follows the
+     * normal rules (locked), see [shouldLockOnColdStart].
+     */
+    private var externalScreenAt = 0L
+
     /** True while the system unlock dialog is on screen, so it is never opened twice. */
     @Volatile
     var promptShowing = false
@@ -125,6 +158,16 @@ object AppLock {
         _timeout.value = value
     }
 
+    /**
+     * Call right before Elnor opens another screen itself (the Share sheet, the backup file
+     * picker). The app then goes to the background for a moment; coming back from that screen
+     * must not ask for the fingerprint again, also not with "Immediately".
+     * The exception is in [shouldLockOnReturn].
+     */
+    fun expectExternalScreen() {
+        externalScreenAt = SystemClock.elapsedRealtime()
+    }
+
     /** The app left the screen (Lifecycle ON_STOP). */
     fun onAppStopped() {
         leftAt = SystemClock.elapsedRealtime()
@@ -138,12 +181,16 @@ object AppLock {
     fun onAppStarted() {
         // On screen again: if the process is closed from now on, the next start must be locked
         prefs?.edit()?.putLong(KEY_LEFT_AT, 0L)?.apply()
+        // Used up by this return, whatever happens next
+        val externalAt = externalScreenAt
+        externalScreenAt = 0L
         val left = leftAt
         if (left == 0L) return
         leftAt = 0L
         if (!_enabled.value || _locked.value) return
-        val away = SystemClock.elapsedRealtime() - left
-        if (shouldLockAfterAway(away, _timeout.value)) _locked.value = true
+        val now = SystemClock.elapsedRealtime()
+        val externalAge = if (externalAt == 0L) null else now - externalAt
+        if (shouldLockOnReturn(now - left, _timeout.value, externalAge)) _locked.value = true
     }
 
     fun unlock() {

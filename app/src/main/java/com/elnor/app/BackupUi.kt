@@ -156,6 +156,7 @@ fun BackupScreen(
                         if (repository.exportAll().isEmpty()) {
                             message = "There are no notes to back up yet."
                         } else {
+                            AppLock.expectExternalScreen() // the picker is not "leaving" Elnor
                             exportLauncher.launch(BackupFormat.fileName(System.currentTimeMillis()))
                         }
                     }
@@ -170,7 +171,10 @@ fun BackupScreen(
                     "changed or replaced, and a note that is already here is not added twice.",
                 buttonLabel = "Choose backup file",
                 enabled = !busy,
-                onClick = { importLauncher.launch(arrayOf("*/*")) }
+                onClick = {
+                    AppLock.expectExternalScreen() // the picker is not "leaving" Elnor
+                    importLauncher.launch(arrayOf("*/*"))
+                }
             )
 
             val result = message
