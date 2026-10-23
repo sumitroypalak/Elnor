@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -21,6 +21,15 @@ import org.junit.Test
 class NoteEditorAutoSaveTest {
 
     private val delayMs = 1_000L
+
+    /**
+     * Moves the virtual clock and runs everything that is due. advanceUntilIdle() is not used: it
+     * ignores the tasks of backgroundScope, and that is where the save queue and the timer run.
+     */
+    private fun TestScope.settle() {
+        advanceTimeBy(delayMs * 3)
+        runCurrent()
+    }
 
     /** Remembers what the ViewModel asked the storage to do. */
     private class FakeRepository : NoteRepository {
@@ -143,7 +152,7 @@ class NoteEditorAutoSaveTest {
         // The editor screen gives the text on screen to the ViewModel when it opens
         vm.onTitleChange("Title")
         vm.onBodyChange("Body")
-        advanceUntilIdle()
+        settle()
 
         assertTrue(repo.updated.isEmpty())
         assertTrue(repo.inserted.isEmpty())
@@ -173,7 +182,7 @@ class NoteEditorAutoSaveTest {
 
         vm.onBodyChange("hello")
         vm.onBack()
-        advanceUntilIdle()
+        settle()
 
         assertEquals(1, repo.inserted.size)
     }
@@ -186,7 +195,7 @@ class NoteEditorAutoSaveTest {
 
         vm.onBodyChange("B changed")
         vm.deleteNote()
-        advanceUntilIdle()
+        settle()
 
         assertEquals(listOf(5L), repo.trashed)
         assertTrue("the note must not be saved again after delete", repo.updated.isEmpty())

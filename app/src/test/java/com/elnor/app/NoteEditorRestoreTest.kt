@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -23,6 +23,15 @@ import org.junit.Test
 class NoteEditorRestoreTest {
 
     private val delayMs = 1_000L
+
+    /**
+     * Moves the virtual clock and runs everything that is due. advanceUntilIdle() is not used: it
+     * ignores the tasks of backgroundScope, and that is where the save queue and the timer run.
+     */
+    private fun TestScope.settle() {
+        advanceTimeBy(delayMs * 3)
+        runCurrent()
+    }
     private val key = NoteEditorViewModel.KEY_DRAFT_NOTE_ID
 
     private class FakeRepository : NoteRepository {
@@ -62,7 +71,7 @@ class NoteEditorRestoreTest {
         vm.open(null)
         vm.onBodyChange("hello")
         advanceTimeBy(delayMs + 1)
-        advanceUntilIdle()
+        settle()
 
         assertEquals(100L, state.get<Long>(key))
     }
@@ -75,7 +84,7 @@ class NoteEditorRestoreTest {
         first.open(null)
         first.onBodyChange("hello")
         advanceTimeBy(delayMs + 1)
-        advanceUntilIdle()
+        settle()
         assertEquals(1, repo.inserted.size)
 
         // The process is closed and started again: new ViewModel, same saved state, text restored
@@ -83,7 +92,7 @@ class NoteEditorRestoreTest {
         second.open(null)
         second.onBodyChange("hello again")
         advanceTimeBy(delayMs + 1)
-        advanceUntilIdle()
+        settle()
 
         assertEquals("no second copy", 1, repo.inserted.size)
         assertEquals(1, repo.updated.size)
@@ -105,7 +114,7 @@ class NoteEditorRestoreTest {
         vm.open(null)
         vm.onBodyChange("fresh")
         advanceTimeBy(delayMs + 1)
-        advanceUntilIdle()
+        settle()
 
         assertEquals(1, repo.inserted.size)
         assertEquals(0, repo.updated.size)
@@ -118,11 +127,11 @@ class NoteEditorRestoreTest {
         vm.open(null)
         vm.onBodyChange("hello")
         advanceTimeBy(delayMs + 1)
-        advanceUntilIdle()
+        settle()
         assertEquals(100L, state.get<Long>(key))
 
         vm.onBack()
-        advanceUntilIdle()
+        settle()
         assertNull(state.get<Long>(key))
     }
 
@@ -134,10 +143,10 @@ class NoteEditorRestoreTest {
         vm.open(null)
         vm.onBodyChange("hello")
         advanceTimeBy(delayMs + 1)
-        advanceUntilIdle()
+        settle()
 
         vm.deleteNote()
-        advanceUntilIdle()
+        settle()
         assertNull(state.get<Long>(key))
         assertEquals(listOf(100L), repo.trashed)
     }
@@ -150,7 +159,7 @@ class NoteEditorRestoreTest {
         vm.open(Note(id = 7L, title = "t", body = "old", updatedAt = 1L))
         vm.onBodyChange("new")
         advanceTimeBy(delayMs + 1)
-        advanceUntilIdle()
+        settle()
 
         assertEquals(7L, repo.updated.single().id)
         assertNull(state.get<Long>(key))
@@ -163,7 +172,7 @@ class NoteEditorRestoreTest {
         vm.open(null)
         vm.onBodyChange("hello")
         vm.onStop() // saved right away, not after the pause
-        advanceUntilIdle()
+        settle()
         // The test version does not wait, so the id arrives through the normal publish
         assertEquals(100L, state.get<Long>(key))
     }
