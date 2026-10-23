@@ -231,7 +231,8 @@ fun ElnorApp(
                             modifier = Modifier.weight(1f)
                         )
                         Text(
-                            "${notes.size} notes",
+                            // The notes that are shown now: fewer while a search is active
+                            notesCountLabel(visibleNotes.size),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
