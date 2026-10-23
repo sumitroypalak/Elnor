@@ -42,6 +42,12 @@ android {
         compose = true
     }
 
+    lint {
+        // The lint of Android Gradle Plugin 8.7.x crashes on Kotlin 2.0 test files ("this is a bug
+        // in lint"). The app code is still checked. Remove this after updating the plugin.
+        ignoreTestSources = true
+    }
+
     testOptions {
         unitTests {
             // Android classes that are not available in local tests (like Log) return defaults
