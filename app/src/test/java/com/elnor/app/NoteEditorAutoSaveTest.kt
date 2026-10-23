@@ -73,6 +73,30 @@ class NoteEditorAutoSaveTest {
     }
 
     @Test
+    fun newNote_usesTheShorterFirstSaveDelay_butExistingNoteUsesTheNormalOne() = runTest {
+        val repo = FakeRepository()
+        val vm = NoteEditorViewModel(
+            repo, backgroundScope,
+            autoSaveDelayMs = delayMs, timerScope = backgroundScope, firstSaveDelayMs = 200L
+        )
+        vm.open(null)
+
+        vm.onBodyChange("hello")
+        advanceTimeBy(201)
+        runCurrent()
+        assertEquals("the first save should use the short delay", 1, repo.inserted.size)
+
+        // The note now has an id: the next save waits for the normal pause
+        vm.onBodyChange("hello world")
+        advanceTimeBy(delayMs - 1)
+        runCurrent()
+        assertTrue("an update must wait for the normal pause", repo.updated.isEmpty())
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(1, repo.updated.size)
+    }
+
+    @Test
     fun typingAgain_restartsTheWait_andSavesTheLatestText() = runTest {
         val repo = FakeRepository()
         val vm = NoteEditorViewModel(repo, backgroundScope, autoSaveDelayMs = delayMs, timerScope = backgroundScope)

@@ -49,6 +49,7 @@ fun ElnorApp(
 ) {
     // The list follows the repository, so it updates by itself after every auto-save
     val notes by repository.notes.collectAsState()
+    val notesLoaded by repository.notesLoaded.collectAsState()
     var search by remember { mutableStateOf("") }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var homeTab by rememberSaveable { mutableStateOf(HomeTab.NOTE) }
@@ -83,11 +84,19 @@ fun ElnorApp(
     var viewMode by remember { mutableStateOf(loadNotesViewMode(context)) }
 
     if (editorOpen) {
-        EditorScreen(
-            note = editingNote,
-            viewModel = editorViewModel,
-            onClose = { editorOpen = false }
-        )
+        if (editingNoteId != null && !notesLoaded) {
+            // The page came back after the app was closed: wait for the notes, so the note that
+            // was open is found and not mistaken for a new one
+            Box(Modifier.fillMaxSize().background(bgColor), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            EditorScreen(
+                note = editingNote,
+                viewModel = editorViewModel,
+                onClose = { editorOpen = false }
+            )
+        }
     } else {
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val drawerScope = rememberCoroutineScope()
@@ -263,7 +272,17 @@ fun ElnorApp(
 
                     Spacer(Modifier.height(14.dp))
 
-                    if (visibleNotes.isEmpty()) {
+                    if (!notesLoaded && search.isBlank()) {
+                        // The database has not answered yet (a split second at start-up)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    } else if (visibleNotes.isEmpty()) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()

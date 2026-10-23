@@ -3,13 +3,14 @@ package com.elnor.app
 import android.content.Context
 import androidx.room.Room
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.runBlocking
 
 /**
  * Room (SQLite) storage. [scope] keeps [notes] up to date; tests pass their own scope.
@@ -21,15 +22,17 @@ class RoomNoteRepository(
     private val now: () -> Long = { System.currentTimeMillis() }
 ) : NoteRepository {
 
-    // The first value is read once, right away. Without it the list would be empty for a
-    // moment when the app starts, and "Your space is empty" would flash on the screen.
+    private val _notesLoaded = MutableStateFlow(false)
+
+    // The list starts empty and fills as soon as the database answers (on a background thread).
+    // Nothing blocks the main thread at start-up. [notesLoaded] turns true with the first real
+    // value, so the screen can show a loading state and "Your space is empty" never flashes.
     override val notes: StateFlow<List<Note>> = dao.observeAll()
         .map { list -> list.map { it.toNote() } }
-        .stateIn(
-            scope,
-            SharingStarted.Eagerly,
-            runBlocking(Dispatchers.IO) { dao.getAll() }.map { it.toNote() }
-        )
+        .onEach { _notesLoaded.value = true }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    override val notesLoaded: StateFlow<Boolean> = _notesLoaded.asStateFlow()
 
     override val trashedNotes: Flow<List<Note>> = dao.observeTrashed()
         .map { list -> list.map { it.toNote() } }

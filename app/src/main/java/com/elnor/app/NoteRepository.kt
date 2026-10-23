@@ -6,8 +6,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+/** The default of [NoteRepository.notesLoaded] for a repository that has its notes at once. */
+private val ALWAYS_LOADED: StateFlow<Boolean> = MutableStateFlow(true).asStateFlow()
 
 /**
  * Where notes are stored. The editor ViewModel only knows this interface, so tests can use
@@ -19,6 +24,13 @@ interface NoteRepository {
      * by itself after a save.
      */
     val notes: StateFlow<List<Note>>
+
+    /**
+     * False until [notes] has its first real value from storage. [notes] starts as an empty
+     * list, so the screen uses this to show a loading state instead of "Your space is empty".
+     * A fake repository that has its notes at once can leave the default (always true).
+     */
+    val notesLoaded: StateFlow<Boolean> get() = ALWAYS_LOADED
 
     /** Notes in the Trash, the most recently deleted first. Updates by itself. */
     val trashedNotes: Flow<List<Note>>

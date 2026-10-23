@@ -68,6 +68,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * @param now clock for updatedAt. Replaced in tests.
  * @param autoSaveDelayMs how long the user must stop typing before the text is saved.
+ * @param firstSaveDelayMs the same wait, but for the first save of a new note only. A new note
+ *   gets its id from that save, and [onStop] has to wait for the id when it is missing. A short
+ *   wait here makes sure the id almost always exists long before the app goes to the background,
+ *   so [onStop] almost never has to block.
  * @param timerScope scope of the pause timer. Null = viewModelScope. Replaced in tests.
  */
 class NoteEditorViewModel(
@@ -76,7 +80,9 @@ class NoteEditorViewModel(
     private val now: () -> Long = { System.currentTimeMillis() },
     private val autoSaveDelayMs: Long = AUTO_SAVE_DELAY_MS,
     private val timerScope: CoroutineScope? = null,
-    private val savedState: SavedStateHandle = SavedStateHandle()
+    private val savedState: SavedStateHandle = SavedStateHandle(),
+    /** How long to wait before the FIRST save of a new note. Shorter, so the note gets its id early. */
+    private val firstSaveDelayMs: Long = autoSaveDelayMs
 ) : ViewModel() {
 
     /** One open editor page. [id] is null until a new note was inserted. */
@@ -213,7 +219,7 @@ class NoteEditorViewModel(
         val current = session ?: return
         autoSaveJob?.cancel()
         autoSaveJob = (timerScope ?: viewModelScope).launch {
-            delay(autoSaveDelayMs)
+            delay(if (current.id == null) firstSaveDelayMs else autoSaveDelayMs)
             // The page may have closed or a new one opened while we waited
             if (session !== current) return@launch
             commands.trySend(Command.Save(current, draftTitle, draftBody, fromPause = true))
@@ -413,7 +419,10 @@ class NoteEditorViewModel(
         const val KEY_DRAFT_NOTE_ID = "draft_note_id"
 
         /** The longest [onStop] waits for the first save of a new note (milliseconds). */
-        const val STOP_WAIT_MS = 1_500L
+        const val STOP_WAIT_MS = 500L
+
+        /** Wait before the first save of a new note (milliseconds), see [firstSaveDelayMs]. */
+        const val FIRST_SAVE_DELAY_MS = 600L
 
         /** How long the user must stop typing before the text is saved (milliseconds). */
         const val AUTO_SAVE_DELAY_MS = 2_000L
@@ -428,7 +437,8 @@ class NoteEditorViewModel(
                         repository = RoomNoteRepository.get(appContext),
                         saveScope = ApplicationScope.scope,
                         // Survives the system closing the app process (see the class comment)
-                        savedState = extras.createSavedStateHandle()
+                        savedState = extras.createSavedStateHandle(),
+                        firstSaveDelayMs = FIRST_SAVE_DELAY_MS
                     ) as T
                 }
             }
