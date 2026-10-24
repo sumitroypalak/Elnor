@@ -116,11 +116,21 @@ class MainActivity : FragmentActivity() {
         if (!AppLock.locked.value || AppLock.promptShowing) return
         if (automatic && !AppLock.autoPromptAllowed) return
 
-        if (!AppLockAuth.isAvailable(this)) {
-            // The phone's screen lock was removed after the app lock was turned on. Nothing is
-            // left to ask for, so the lock is turned off instead of locking the user out for good.
-            AppLock.setEnabled(applicationContext, false)
-            return
+        when (AppLockAuth.availability(this)) {
+            AppLockAuth.Availability.PERMANENTLY_UNAVAILABLE -> {
+                // The phone's screen lock was removed after the app lock was turned on. Nothing is
+                // left to ask for, so the lock is turned off instead of locking the user out for good.
+                AppLock.setUnlockTemporarilyUnavailable(false)
+                AppLock.setEnabled(applicationContext, false)
+                return
+            }
+            AppLockAuth.Availability.TEMPORARILY_UNAVAILABLE -> {
+                // A passing problem (for example the sensor is busy). The lock must NOT be turned
+                // off: the app stays locked and the lock screen asks the user to try again later.
+                AppLock.setUnlockTemporarilyUnavailable(true)
+                return
+            }
+            AppLockAuth.Availability.AVAILABLE -> AppLock.setUnlockTemporarilyUnavailable(false)
         }
 
         AppLock.promptShowing = true

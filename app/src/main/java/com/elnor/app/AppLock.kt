@@ -101,6 +101,18 @@ object AppLock {
     /** True while the lock screen must cover the app. */
     val locked: StateFlow<Boolean> = _locked.asStateFlow()
 
+    private val _unlockTemporarilyUnavailable = MutableStateFlow(false)
+
+    /**
+     * True while the phone cannot show the unlock dialog because of a passing problem. The app
+     * stays locked and the lock screen asks the user to try again later.
+     */
+    val unlockTemporarilyUnavailable: StateFlow<Boolean> = _unlockTemporarilyUnavailable.asStateFlow()
+
+    fun setUnlockTemporarilyUnavailable(value: Boolean) {
+        _unlockTemporarilyUnavailable.value = value
+    }
+
     private var initialized = false
     private var prefs: SharedPreferences? = null
 

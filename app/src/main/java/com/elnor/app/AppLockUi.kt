@@ -266,6 +266,16 @@ fun LockedScreen(onUnlock: () -> Unit) {
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
             )
+            val temporarilyUnavailable by AppLock.unlockTemporarilyUnavailable.collectAsState()
+            if (temporarilyUnavailable) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Unlock is not available right now. Please try again later.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
             Spacer(Modifier.height(28.dp))
             androidx.compose.material3.Button(onClick = onUnlock) {
                 Text("Unlock")

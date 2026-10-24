@@ -27,6 +27,30 @@ object AppLockAuth {
         BiometricManager.from(context).canAuthenticate(AUTHENTICATORS) ==
             BiometricManager.BIOMETRIC_SUCCESS
 
+    /** Whether the phone can ask the user to unlock right now, and if not, for how long. */
+    enum class Availability {
+        /** The system dialog can be shown. */
+        AVAILABLE,
+
+        /** The phone has no screen lock / biometric (any more). Nothing is left to ask for. */
+        PERMANENTLY_UNAVAILABLE,
+
+        /** A passing problem (sensor busy, security update pending ...). The lock must stay on. */
+        TEMPORARILY_UNAVAILABLE
+    }
+
+    /** Maps the result of canAuthenticate() so a passing error never turns the App lock off. */
+    fun availability(context: Context): Availability =
+        availabilityFor(BiometricManager.from(context).canAuthenticate(AUTHENTICATORS))
+
+    /** Only "nothing is set up" is permanent. Every other error is treated as temporary. */
+    internal fun availabilityFor(canAuthenticateResult: Int): Availability = when (canAuthenticateResult) {
+        BiometricManager.BIOMETRIC_SUCCESS -> Availability.AVAILABLE
+        BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED,
+        BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> Availability.PERMANENTLY_UNAVAILABLE
+        else -> Availability.TEMPORARILY_UNAVAILABLE
+    }
+
     /**
      * Shows the system dialog. [onSuccess] runs only when the user proved who they are.
      * [onError] runs when the dialog was closed or could not be shown; [userCancelled] is true
