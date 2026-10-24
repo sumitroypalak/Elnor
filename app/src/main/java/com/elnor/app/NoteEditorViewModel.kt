@@ -82,7 +82,9 @@ class NoteEditorViewModel(
     private val timerScope: CoroutineScope? = null,
     private val savedState: SavedStateHandle = SavedStateHandle(),
     /** How long to wait before the FIRST save of a new note. Shorter, so the note gets its id early. */
-    private val firstSaveDelayMs: Long = autoSaveDelayMs
+    private val firstSaveDelayMs: Long = autoSaveDelayMs,
+    /** The longest [onStop] blocks the main thread for the id of a new note. Replaced in tests. */
+    private val stopWaitMs: Long = STOP_WAIT_MS
 ) : ViewModel() {
 
     /** One open editor page. [id] is null until a new note was inserted. */
@@ -345,9 +347,16 @@ class NoteEditorViewModel(
      *
      * [waitForNewNote]: the system saves the state of the page right after this call returns, and
      * the id of a new note only exists once its first save is done. With true, a new note that is
-     * not saved yet is saved first, and this call waits for it (at most [STOP_WAIT_MS], in
-     * practice a few milliseconds), so the id is in [savedState] in time. The real app passes true.
-     * Tests pass nothing and do not block.
+     * not saved yet is saved first, and this call waits for it (at most [stopWaitMs], default
+     * [STOP_WAIT_MS], in practice a few milliseconds), so the id is in [savedState] in time. The
+     * real app passes true. Tests pass nothing and do not block.
+     *
+     * This blocks the main thread, so the wait is kept short. It is rarely needed at all: the
+     * first save runs [firstSaveDelayMs] after the first typing, long before the app is sent to
+     * the background. If the wait runs out, the note is still saved, only its id is missing from
+     * the saved state. That matters only if the system ALSO closes the app process right away and
+     * the user then comes back to the same page: that page would save the note once more as a
+     * new note. The text itself is never lost, because the page keeps it in its own saved state.
      */
     fun onStop(waitForNewNote: Boolean = false) {
         val current = session ?: return
@@ -357,7 +366,7 @@ class NoteEditorViewModel(
         val done = if (mustWait) CompletableDeferred<Unit>() else null
         commands.trySend(Command.Save(current, draftTitle, draftBody, done = done))
         if (done != null) {
-            runBlocking { withTimeoutOrNull(STOP_WAIT_MS) { done.await() } }
+            runBlocking { withTimeoutOrNull(stopWaitMs) { done.await() } }
         }
         // Written here, on this thread, so it is surely there when the state is saved
         val id = current.id
@@ -477,8 +486,11 @@ class NoteEditorViewModel(
         /** Key in the saved state: the id of a new note that was saved while its page is open. */
         const val KEY_DRAFT_NOTE_ID = "draft_note_id"
 
-        /** The longest [onStop] waits for the first save of a new note (milliseconds). */
-        const val STOP_WAIT_MS = 500L
+        /**
+         * The longest [onStop] waits for the first save of a new note (milliseconds). It blocks
+         * the main thread, so it stays well under a dropped frame burst (was 500).
+         */
+        const val STOP_WAIT_MS = 150L
 
         /** Wait before the first save of a new note (milliseconds), see [firstSaveDelayMs]. */
         const val FIRST_SAVE_DELAY_MS = 600L
