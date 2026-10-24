@@ -61,6 +61,25 @@ class RoomNoteRepository(
         )
     }
 
+    // The id inside [note] is used as it is (a new note chooses its id when its page opens), so a
+    // page that comes back after the process was closed can insert under the same id. A taken id
+    // makes the insert fail (it never replaces a note).
+    override suspend fun insertWithId(note: Note): Long {
+        if (note.id <= 0L) return insert(note)
+        return dao.insert(note.toEntity().copy(deletedAt = null))
+    }
+
+    override suspend fun updateIfExists(note: Note): Boolean {
+        val entity = note.toEntity()
+        return dao.updateContent(
+            id = entity.id,
+            title = entity.title,
+            body = entity.body,
+            updatedAt = entity.updatedAt,
+            searchText = entity.searchText
+        ) > 0
+    }
+
     override suspend fun moveToTrash(id: Long) {
         dao.moveToTrash(id, now())
     }

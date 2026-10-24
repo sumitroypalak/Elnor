@@ -9,7 +9,6 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -18,8 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Auto-save for the note editor. There is no Save button.
@@ -60,7 +57,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * it puts a normal save into the same queue as above. If the ViewModel is cleared first, the timer
  * is cancelled, and that is fine because [onBack] has already queued the final save.
  *
- * A new note that was already saved is remembered in [savedState] (the id the first save gave
+ * A new note chooses its id when its page opens and keeps it in [savedState] from then on (see
+ * [Session.reservedId]), so [onStop] never has to wait for the first save.
+ * A new note is remembered in [savedState] (the id it was given when its page opened
  * it). The system can close the whole app process while it is in the background; the page then
  * comes back with the typed text but with a new, empty ViewModel. [open] finds the id in
  * [savedState] and continues with an update, so no second copy of the note is created.
@@ -68,10 +67,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * @param now clock for updatedAt. Replaced in tests.
  * @param autoSaveDelayMs how long the user must stop typing before the text is saved.
- * @param firstSaveDelayMs the same wait, but for the first save of a new note only. A new note
- *   gets its id from that save, and [onStop] has to wait for the id when it is missing. A short
- *   wait here makes sure the id almost always exists long before the app goes to the background,
- *   so [onStop] almost never has to block.
+ * @param firstSaveDelayMs the same wait, but for the first save of a new note only. A short wait
+ *   makes a new note appear in the notes list (and a Last edited time) soon after typing starts.
  * @param timerScope scope of the pause timer. Null = viewModelScope. Replaced in tests.
  */
 class NoteEditorViewModel(
@@ -83,8 +80,8 @@ class NoteEditorViewModel(
     private val savedState: SavedStateHandle = SavedStateHandle(),
     /** How long to wait before the FIRST save of a new note. Shorter, so the note gets its id early. */
     private val firstSaveDelayMs: Long = autoSaveDelayMs,
-    /** The longest [onStop] blocks the main thread for the id of a new note. Replaced in tests. */
-    private val stopWaitMs: Long = STOP_WAIT_MS
+    /** Chooses the id of a new note when its page opens (see [Session.reservedId]). Replaced in tests. */
+    private val newNoteId: () -> Long = { randomNoteId() }
 ) : ViewModel() {
 
     /** One open editor page. [id] is null until a new note was inserted. */
@@ -93,7 +90,13 @@ class NoteEditorViewModel(
         var savedTitle: String,
         var savedBody: String,
         /** True for a page that began as a new note (also one that continues after a restart). */
-        val startedNew: Boolean
+        val startedNew: Boolean,
+        /**
+         * The id a new note will get (or already has). It is chosen when the page opens, so it is
+         * in [savedState] from the first moment and nothing has to wait for the first save.
+         * 0 for a page that edits an existing note.
+         */
+        @Volatile var reservedId: Long = 0L
     )
 
     private sealed interface Command {
@@ -102,9 +105,7 @@ class NoteEditorViewModel(
             val session: Session,
             val title: String,
             val body: String,
-            val fromPause: Boolean = false,
-            /** Completed when this save is finished. Only [onStop] waits for it. */
-            val done: CompletableDeferred<Unit>? = null
+            val fromPause: Boolean = false
         ) : Command
 
         class Delete(val session: Session) : Command
@@ -186,8 +187,6 @@ class NoteEditorViewModel(
                     // Keep the queue alive. The next save tries again (the session state is unchanged).
                     Log.e("NoteEditorViewModel", "Saving failed", e)
                     if (command is Command.Save) reportSaveFailure(command)
-                } finally {
-                    (command as? Command.Save)?.done?.complete(Unit)
                 }
             }
         }
@@ -204,7 +203,15 @@ class NoteEditorViewModel(
         // and started again: it must update that note, not insert a second one.
         val resumedId = if (note == null) savedState.get<Long>(KEY_DRAFT_NOTE_ID) else null
         if (note != null) savedState.remove<Long>(KEY_DRAFT_NOTE_ID)
+        // A new note chooses its id now. A resumed page keeps the one it had.
+        val reserved = when {
+            note != null -> 0L
+            resumedId != null -> resumedId
+            else -> newNoteId()
+        }
+        if (note == null && resumedId == null) savedState[KEY_DRAFT_NOTE_ID] = reserved
         session = Session(
+            reservedId = reserved,
             id = note?.id ?: resumedId,
             // For a resumed note the saved text is not known here. "" makes the next non-blank
             // text count as a change, so it is written (an update, never an insert).
@@ -343,35 +350,22 @@ class NoteEditorViewModel(
     }
 
     /**
-     * App went to the background: save, and keep the session open.
+     * App went to the background: save, and keep the session open. Nothing here waits for the
+     * storage, so the main thread is never blocked.
      *
-     * [waitForNewNote]: the system saves the state of the page right after this call returns, and
-     * the id of a new note only exists once its first save is done. With true, a new note that is
-     * not saved yet is saved first, and this call waits for it (at most [stopWaitMs], default
-     * [STOP_WAIT_MS], in practice a few milliseconds), so the id is in [savedState] in time. The
-     * real app passes true. Tests pass nothing and do not block.
-     *
-     * This blocks the main thread, so the wait is kept short. It is rarely needed at all: the
-     * first save runs [firstSaveDelayMs] after the first typing, long before the app is sent to
-     * the background. If the wait runs out, the note is still saved, only its id is missing from
-     * the saved state. That matters only if the system ALSO closes the app process right away and
-     * the user then comes back to the same page: that page would save the note once more as a
-     * new note. The text itself is never lost, because the page keeps it in its own saved state.
+     * The system saves the state of the page right after this call returns. A new note already has
+     * its id (chosen in [open]), so the id is in [savedState] at once, even if the first save is
+     * still running or has not started. If the app process is then closed, the page comes back
+     * with that id ([open]): it updates the note if the save finished, or inserts it with the same
+     * id if it did not. Either way there is exactly one copy, and the text is not lost.
      */
-    fun onStop(waitForNewNote: Boolean = false) {
+    fun onStop() {
         val current = session ?: return
         cancelAutoSave() // saved right now, no need to wait for the pause
-        val mustWait = waitForNewNote && current.id == null &&
-            (draftTitle.isNotBlank() || draftBody.isNotBlank())
-        val done = if (mustWait) CompletableDeferred<Unit>() else null
-        commands.trySend(Command.Save(current, draftTitle, draftBody, done = done))
-        if (done != null) {
-            runBlocking { withTimeoutOrNull(stopWaitMs) { done.await() } }
-        }
+        commands.trySend(Command.Save(current, draftTitle, draftBody))
         // Written here, on this thread, so it is surely there when the state is saved
-        val id = current.id
-        if (session === current && current.startedNew && id != null) {
-            savedState[KEY_DRAFT_NOTE_ID] = id
+        if (current.startedNew && current.reservedId != 0L) {
+            savedState[KEY_DRAFT_NOTE_ID] = current.reservedId
         }
     }
 
@@ -430,17 +424,23 @@ class NoteEditorViewModel(
                 session.id = null
                 session.savedTitle = ""
                 session.savedBody = ""
+                // The old id now belongs to the note in the Trash. Text typed from now on is a
+                // new note and needs an id of its own.
+                if (session.startedNew) session.reservedId = newNoteId()
                 publishHasSavedNote(session, false)
                 publishLastSavedAt(session, null)
-                publishDraftNoteId(session, null)
+                publishDraftNoteId(session, if (session.startedNew) session.reservedId else null)
             }
             return
         }
 
         if (id == null) {
-            // First save of a new note. Keep the id so the next save is an update.
+            // First save of a new note, under the id chosen when the page opened. Keep it so the
+            // next save is an update.
             val savedAt = now()
-            val newId = repository.insert(Note(id = 0L, title = title, body = body, updatedAt = savedAt))
+            val newId = repository.insertWithId(
+                Note(id = session.reservedId, title = title, body = body, updatedAt = savedAt)
+            )
             session.id = newId
             session.savedTitle = title
             session.savedBody = body
@@ -453,7 +453,12 @@ class NoteEditorViewModel(
         if (title == session.savedTitle && body == session.savedBody) return // nothing changed
 
         val savedAt = now()
-        repository.update(Note(id = id, title = title, body = body, updatedAt = savedAt))
+        val changed = Note(id = id, title = title, body = body, updatedAt = savedAt)
+        // A page that came back after the app process was closed does not know if its note was
+        // written before that. If there is no such note, it is inserted under the same id.
+        if (!repository.updateIfExists(changed) && session.startedNew) {
+            repository.insertWithId(changed)
+        }
         session.savedTitle = title
         session.savedBody = body
         publishLastSavedAt(session, savedAt)
@@ -487,10 +492,12 @@ class NoteEditorViewModel(
         const val KEY_DRAFT_NOTE_ID = "draft_note_id"
 
         /**
-         * The longest [onStop] waits for the first save of a new note (milliseconds). It blocks
-         * the main thread, so it stays well under a dropped frame burst (was 500).
+         * A random id for a new note: from 2^41 (above the time-based ids of notes from the first
+         * version of the app) to 2^52, far below Long.MAX_VALUE, so the database counter never
+         * overflows. A clash with another note is practically impossible (about 1 in 10^12).
          */
-        const val STOP_WAIT_MS = 150L
+        fun randomNoteId(): Long =
+            kotlin.random.Random.nextLong(1L shl 41, 1L shl 52)
 
         /** Wait before the first save of a new note (milliseconds), see [firstSaveDelayMs]. */
         const val FIRST_SAVE_DELAY_MS = 600L

@@ -52,6 +52,22 @@ interface NoteRepository {
     suspend fun update(note: Note)
 
     /**
+     * Like [insert], but the new note gets the id that is inside [note] (a new note chooses its id
+     * when its editor page opens). Returns that id. A repository that cannot do this may ignore
+     * the id; then it is the same as [insert].
+     */
+    suspend fun insertWithId(note: Note): Long = insert(note)
+
+    /**
+     * Like [update], but tells if the note exists: false when no stored note has this id (nothing
+     * was written). Never moves a note in or out of the Trash.
+     */
+    suspend fun updateIfExists(note: Note): Boolean {
+        update(note)
+        return true
+    }
+
+    /**
      * "Delete" for the user: the note goes to the Trash and keeps all its data. Does nothing if
      * it no longer exists or is already in the Trash.
      */
