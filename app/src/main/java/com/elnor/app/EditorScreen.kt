@@ -47,6 +47,8 @@ fun EditorScreen(
         mutableStateOf(TextFieldValue(text, TextRange(text.length)))
     }
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmLeaveUnsaved by rememberSaveable { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
     val bodyFocus = remember { FocusRequester() }
     val context = LocalContext.current
 
@@ -102,9 +104,25 @@ fun EditorScreen(
         runCatching { bodyFocus.requestFocus() }
     }
 
+    // The last save did not work (for example the storage is full). The text is still here.
+    val saveFailed by viewModel.saveFailed.collectAsState()
+    LaunchedEffect(saveFailed) {
+        if (saveFailed) {
+            snackbarHostState.showSnackbar(
+                message = "Could not save your note. Your text is still here.",
+                duration = SnackbarDuration.Long
+            )
+        }
+    }
+
     // Back arrow and the phone's Back button / gesture: the ViewModel saves, we close the page.
     // (There is no Save button. The app going to the background is saved by MainActivity.)
+    // If the last save failed, the user is asked first: leaving now may lose the latest text.
     fun saveAndClose() {
+        if (saveFailed) {
+            confirmLeaveUnsaved = true
+            return
+        }
         viewModel.onBack()
         onClose()
     }
@@ -122,6 +140,8 @@ fun EditorScreen(
 
     Scaffold(
         containerColor = bgColor,
+        // imePadding: the message must stay above the keyboard
+        snackbarHost = { SnackbarHost(snackbarHostState, modifier = Modifier.imePadding()) },
         topBar = {
             TopAppBar(
                 title = {},
@@ -237,6 +257,18 @@ fun EditorScreen(
                 colors = fieldColors
             )
 
+            // Stays on the screen as long as the last save has not worked
+            if (saveFailed) {
+                Text(
+                    "Not saved yet. Elnor will try again when you type or leave.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                )
+            }
+
             // Word and character count, just above the keyboard
             Text(
                 formatNoteStats(stats),
@@ -247,6 +279,43 @@ fun EditorScreen(
                     .padding(horizontal = 24.dp, vertical = 8.dp)
             )
         }
+    }
+
+    if (confirmLeaveUnsaved) {
+        AlertDialog(
+            onDismissRequest = {
+                confirmLeaveUnsaved = false
+                viewModel.retrySave()
+            },
+            title = { Text("Note not saved", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Elnor could not save this note. If you leave now, your latest changes " +
+                        "may be lost. Use the copy button to keep the text first."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmLeaveUnsaved = false
+                        viewModel.onBack() // one last try
+                        onClose()
+                    }
+                ) {
+                    Text("Leave anyway", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        confirmLeaveUnsaved = false
+                        viewModel.retrySave()
+                    }
+                ) {
+                    Text("Keep editing")
+                }
+            }
+        )
     }
 
     if (confirmDelete) {

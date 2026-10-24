@@ -83,6 +83,22 @@ fun ElnorApp(
     val context = LocalContext.current
     var viewMode by remember { mutableStateOf(loadNotesViewMode(context)) }
 
+    // A note whose final save failed after its page closed (for example the storage is full).
+    // Its text is not on any screen any more, so it can still be copied from this message.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val lostNote by editorViewModel.lostNote.collectAsState()
+    LaunchedEffect(lostNote) {
+        val text = lostNote ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = "Your last note could not be saved.",
+            actionLabel = "Copy text",
+            withDismissAction = true,
+            duration = SnackbarDuration.Indefinite
+        )
+        if (result == SnackbarResult.ActionPerformed) copyTextToClipboard(context, text)
+        editorViewModel.clearLostNote()
+    }
+
     if (editorOpen) {
         if (editingNoteId != null && !notesLoaded) {
             // The page came back after the app was closed: wait for the notes, so the note that
@@ -114,6 +130,7 @@ fun ElnorApp(
         ) {
             Scaffold(
                 containerColor = bgColor,
+                snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
                     // A normal-height bar: the title and the menu button share one line, so there
                     // is no empty space above the title. The 4.dp / 16.dp paddings put the title

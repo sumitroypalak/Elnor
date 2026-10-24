@@ -125,6 +125,29 @@ class NoteEditorViewModel(
      */
     val lastSavedAt: StateFlow<Long?> = _lastSavedAt.asStateFlow()
 
+    private val _saveFailed = MutableStateFlow(false)
+
+    /**
+     * True while the last save of the open page did not work (for example the phone's storage is
+     * full). The text is still on the screen and in memory. It turns false again as soon as a
+     * later save works, and when a page is opened or closed. The editor shows a message and asks
+     * before the user leaves.
+     */
+    val saveFailed: StateFlow<Boolean> = _saveFailed.asStateFlow()
+
+    private val _lostNote = MutableStateFlow<String?>(null)
+
+    /**
+     * The text (title, empty line, text) of a note whose FINAL save failed after its page was
+     * already closed, so it could not be written and is not on any screen any more. The notes
+     * list offers to copy it, then calls [clearLostNote]. Null when there is nothing to report.
+     */
+    val lostNote: StateFlow<String?> = _lostNote.asStateFlow()
+
+    fun clearLostNote() {
+        _lostNote.value = null
+    }
+
     @Volatile
     private var session: Session? = null
     private var draftTitle = ""
@@ -151,11 +174,16 @@ class NoteEditorViewModel(
             for (command in commands) {
                 try {
                     handle(command)
+                    // A save that works clears an earlier failure of the page that is open now
+                    if (command is Command.Save && session === command.session) {
+                        _saveFailed.value = false
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     // Keep the queue alive. The next save tries again (the session state is unchanged).
                     Log.e("NoteEditorViewModel", "Saving failed", e)
+                    if (command is Command.Save) reportSaveFailure(command)
                 } finally {
                     (command as? Command.Save)?.done?.complete(Unit)
                 }
@@ -186,6 +214,7 @@ class NoteEditorViewModel(
         draftBody = note?.body ?: ""
         draftSelStart = draftBody.length
         draftSelEnd = draftBody.length
+        _saveFailed.value = false // a new page starts without an old error
         history = EditHistory(snapshot(), now) // a new page starts with an empty Undo memory
         refreshHistoryFlags()
         _hasSavedNote.value = note != null || resumedId != null
@@ -271,10 +300,39 @@ class NoteEditorViewModel(
         refreshHistoryFlags()
     }
 
+    /**
+     * Tries to save the text that is on the page again, without leaving. The editor calls this
+     * after a failed save, when the user chooses to keep editing. Like a pause-save, it never
+     * moves a note to the Trash.
+     */
+    fun retrySave() {
+        val current = session ?: return
+        cancelAutoSave()
+        commands.trySend(Command.Save(current, draftTitle, draftBody, fromPause = true))
+    }
+
+    /**
+     * A save did not work. If its page is still open, the editor is told ([saveFailed]) and the
+     * text stays on the screen. If the page is already closed, only a FINAL save (back / app
+     * stopped) matters: it is the last chance, so the text is kept in [lostNote] to be copied.
+     * A failed pause-save of a closed page is ignored, because the final save that follows it
+     * has the newer text.
+     */
+    private fun reportSaveFailure(command: Command.Save) {
+        if (session === command.session) {
+            _saveFailed.value = true
+            return
+        }
+        if (command.fromPause) return
+        val text = noteTextForCopy(command.title, command.body)
+        if (text.isNotEmpty()) _lostNote.value = text
+    }
+
     /** Back arrow or system back: save, and end the session. */
     fun onBack() {
         val current = session ?: return
         session = null
+        _saveFailed.value = false // the page is closing; a failure of the final save goes to lostNote
         cancelAutoSave() // this save is the final one
         _lastSavedAt.value = null // the page is closing: the next page must not start with this time
         savedState.remove<Long>(KEY_DRAFT_NOTE_ID) // the page is closed: nothing to continue later
@@ -312,6 +370,7 @@ class NoteEditorViewModel(
     fun deleteNote() {
         val current = session ?: return
         session = null
+        _saveFailed.value = false
         cancelAutoSave() // a waiting pause-save must not bring the note back
         _lastSavedAt.value = null
         savedState.remove<Long>(KEY_DRAFT_NOTE_ID)
