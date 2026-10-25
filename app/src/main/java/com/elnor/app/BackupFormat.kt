@@ -38,7 +38,8 @@ data class ImportSummary(val added: Int, val alreadyPresent: Int)
  *   "exportedAt": 1760000000000,
  *   "noteCount": 2,
  *   "notes": [
- *     { "title": "...", "body": "...", "updatedAt": 1, "deletedAt": null, "pinnedAt": null }
+ *     { "title": "...", "body": "...", "updatedAt": 1, "deletedAt": null, "pinnedAt": null,
+ *       "archivedAt": null }
  *   ]
  * }
  * ```
@@ -51,7 +52,7 @@ data class ImportSummary(val added: Int, val alreadyPresent: Int)
  *  - An import only ADDS notes. A note that is already in the app (same title, same text and
  *    same updatedAt) is skipped, so importing the same file twice does not make copies.
  *  - A newer file version is refused instead of being half-read. Missing optional fields in an
- *    older or hand-made file are tolerated.
+ *    older or hand-made file are tolerated (a file without "archivedAt" has no archived notes).
  *
  * This file has no Android classes besides org.json, so it is tested with plain unit tests.
  */
@@ -75,6 +76,7 @@ object BackupFormat {
                     put("updatedAt", note.updatedAt)
                     put("deletedAt", note.deletedAt ?: JSONObject.NULL)
                     put("pinnedAt", note.pinnedAt ?: JSONObject.NULL)
+                    put("archivedAt", note.archivedAt ?: JSONObject.NULL)
                 }
             )
         }
@@ -128,7 +130,8 @@ object BackupFormat {
             body = body,
             updatedAt = updatedAt,
             deletedAt = longOrNull(obj, "deletedAt"),
-            pinnedAt = longOrNull(obj, "pinnedAt")
+            pinnedAt = longOrNull(obj, "pinnedAt"),
+            archivedAt = longOrNull(obj, "archivedAt")
         )
     }
 

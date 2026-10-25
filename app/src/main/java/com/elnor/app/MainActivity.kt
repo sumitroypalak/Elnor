@@ -150,7 +150,7 @@ class MainActivity : FragmentActivity() {
 }
 
 /** The screens the user can open from the home screen. */
-private enum class AppScreen { HOME, SETTINGS, TRASH, APP_LOCK, BACKUP }
+private enum class AppScreen { HOME, SETTINGS, TRASH, ARCHIVE, APP_LOCK, BACKUP }
 
 @Composable
 fun ElnorRoot(
@@ -212,6 +212,14 @@ fun ElnorRoot(
                         AppLockScreen(onBack = { screen = AppScreen.SETTINGS })
                     }
 
+                    AppScreen.ARCHIVE -> {
+                        BackHandler { screen = AppScreen.HOME }
+                        ArchiveScreen(
+                            repository = repository,
+                            onBack = { screen = AppScreen.HOME }
+                        )
+                    }
+
                     AppScreen.TRASH -> {
                         BackHandler { screen = AppScreen.HOME }
                         TrashScreen(
@@ -226,6 +234,7 @@ fun ElnorRoot(
                             repository = repository,
                             editorViewModel = editorViewModel,
                             onOpenSettings = { screen = AppScreen.SETTINGS },
+                            onOpenArchive = { screen = AppScreen.ARCHIVE },
                             onOpenTrash = { screen = AppScreen.TRASH }
                         )
                     }

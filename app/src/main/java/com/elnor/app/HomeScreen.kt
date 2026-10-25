@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +47,7 @@ fun ElnorApp(
     repository: NoteRepository,
     editorViewModel: NoteEditorViewModel,
     onOpenSettings: () -> Unit,
+    onOpenArchive: () -> Unit,
     onOpenTrash: () -> Unit
 ) {
     // The list follows the repository, so it updates by itself after every auto-save
@@ -99,6 +102,55 @@ fun ElnorApp(
         editorViewModel.clearLostNote()
     }
 
+    // ---- Sort order ----
+    var sort by remember { mutableStateOf(loadNotesSort(context)) }
+    // Pinned notes first, then the order the user chose. The database gives the notes newest
+    // first; this puts them in the chosen order.
+    val shownNotes = remember(visibleNotes, sort) { sortNotes(visibleNotes, sort) }
+
+    // ---- Selecting notes (touch and hold a note) ----
+    // The ids of the selected notes (by id, never by list position). Kept when the screen is
+    // recreated (for example rotation). No selected note = the normal screen.
+    var selectedIds by rememberSaveable(
+        stateSaver = listSaver<Set<Long>, Long>(save = { it.toList() }, restore = { it.toSet() })
+    ) { mutableStateOf<Set<Long>>(emptySet()) }
+    val selectionMode = selectedIds.isNotEmpty()
+    var confirmDeleteSelected by rememberSaveable { mutableStateOf(false) }
+    val uiScope = rememberCoroutineScope()
+
+    // A selected note that is gone (deleted somewhere else) is not selected any more. Only checked
+    // when the notes are really loaded, so a selection restored after rotation is not lost.
+    LaunchedEffect(notes, notesLoaded) {
+        if (notesLoaded && notes.isNotEmpty() && selectedIds.isNotEmpty()) {
+            val existing = notes.mapTo(HashSet()) { it.id }
+            val kept = selectedIds.filterTo(HashSet()) { it in existing }
+            if (kept.size != selectedIds.size) selectedIds = kept
+        }
+    }
+
+    fun toggleSelected(id: Long) {
+        selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
+    }
+
+    // The notes leave the list at once (the list follows the repository). The message offers Undo,
+    // which brings them back exactly as they were (also pinned, if they were pinned).
+    fun archiveNotes(ids: List<Long>) {
+        if (ids.isEmpty()) return
+        ApplicationScope.scope.launch { repository.archiveMany(ids) }
+        uiScope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = if (ids.size == 1) "Note archived" else "${ids.size} notes archived",
+                actionLabel = "Undo",
+                withDismissAction = true,
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                ApplicationScope.scope.launch { repository.unarchiveMany(ids) }
+            }
+        }
+    }
+
     if (editorOpen) {
         if (editingNoteId != null && !notesLoaded) {
             // The page came back after the app was closed: wait for the notes, so the note that
@@ -122,16 +174,42 @@ fun ElnorApp(
         BackHandler(enabled = drawerState.isOpen) {
             drawerScope.launch { drawerState.close() }
         }
+        // While notes are selected, Back only ends the selection (registered last, so it wins)
+        BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
 
         EndDrawer(
             drawerState = drawerState,
             onOpenSettings = onOpenSettings,
+            onOpenArchive = onOpenArchive,
             onOpenTrash = onOpenTrash
         ) {
             Scaffold(
                 containerColor = bgColor,
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
+                  if (selectionMode) {
+                    SelectionTopBar(
+                        count = selectedIds.size,
+                        allPinned = notes.any { it.id in selectedIds } &&
+                            notes.filter { it.id in selectedIds }.all { it.pinnedAt != null },
+                        containerColor = bgColor,
+                        onClose = { selectedIds = emptySet() },
+                        onTogglePin = {
+                            val ids = selectedIds.toList()
+                            // all pinned -> unpin them all, otherwise pin them all
+                            val pin = !notes.filter { it.id in selectedIds }.all { it.pinnedAt != null }
+                            ApplicationScope.scope.launch { repository.setPinnedMany(ids, pin) }
+                            selectedIds = emptySet()
+                        },
+                        onArchive = {
+                            val ids = selectedIds.toList()
+                            selectedIds = emptySet()
+                            archiveNotes(ids)
+                        },
+                        onDelete = { confirmDeleteSelected = true },
+                        onSelectAll = { selectedIds = shownNotes.mapTo(HashSet()) { it.id } }
+                    )
+                  } else {
                     // A normal-height bar: the title and the menu button share one line, so there
                     // is no empty space above the title. The 4.dp / 16.dp paddings put the title
                     // and the menu button on the same 20.dp edges as the tagline and the search bar.
@@ -158,10 +236,12 @@ fun ElnorApp(
                             scrolledContainerColor = bgColor
                         )
                     )
+                  }
                 },
                 // The bottom bar floats over the list, in the place of the old "New note" button
                 floatingActionButton = {
-                    ElnorBottomBar(
+                    // No "new note" button while notes are selected
+                    if (!selectionMode) ElnorBottomBar(
                         selected = homeTab,
                         dark = dark,
                         onSelect = { homeTab = it },
@@ -227,7 +307,11 @@ fun ElnorApp(
 
                     OutlinedTextField(
                         value = search,
-                        onValueChange = { search = it },
+                        // A new search ends the selection, so an action never reaches a note that is not on the screen
+                        onValueChange = {
+                            if (it != search) selectedIds = emptySet()
+                            search = it
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("Search your notes...") },
                         leadingIcon = {
@@ -236,7 +320,10 @@ fun ElnorApp(
                         // The clear button is only there while there is text
                         trailingIcon = if (search.isNotEmpty()) {
                             {
-                                IconButton(onClick = { search = "" }) {
+                                IconButton(onClick = {
+                                    search = ""
+                                    selectedIds = emptySet()
+                                }) {
                                     Icon(Icons.Default.Clear, contentDescription = "Clear search")
                                 }
                             }
@@ -264,10 +351,47 @@ fun ElnorApp(
                         )
                         Text(
                             // The notes that are shown now: fewer while a search is active
-                            notesCountLabel(visibleNotes.size),
+                            notesCountLabel(shownNotes.size),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        // Sort order of the notes (pinned notes stay first)
+                        var sortMenuOpen by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { sortMenuOpen = true }) {
+                                Icon(
+                                    SortIcon,
+                                    contentDescription = "Sort notes",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = sortMenuOpen,
+                                onDismissRequest = { sortMenuOpen = false }
+                            ) {
+                                for (option in NotesSort.entries) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                option.label,
+                                                fontWeight = if (option == sort) FontWeight.Bold
+                                                else FontWeight.Normal
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            if (option == sort) {
+                                                Icon(Icons.Default.Check, contentDescription = "Selected")
+                                            }
+                                        },
+                                        onClick = {
+                                            sortMenuOpen = false
+                                            sort = option
+                                            saveNotesSort(context, option)
+                                        }
+                                    )
+                                }
+                            }
+                        }
                         // The button shows the view it switches to
                         IconButton(
                             onClick = {
@@ -297,7 +421,7 @@ fun ElnorApp(
                         ) {
                             CircularProgressIndicator()
                         }
-                    } else if (visibleNotes.isEmpty()) {
+                    } else if (shownNotes.isEmpty()) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -337,10 +461,20 @@ fun ElnorApp(
                                 cardColor = cardColor,
                                 dark = dark,
                                 onClick = {
-                                    editingNoteId = note.id
-                                    editorOpen = true
+                                    if (selectionMode) {
+                                        toggleSelected(note.id)
+                                    } else {
+                                        editingNoteId = note.id
+                                        editorOpen = true
+                                    }
                                 },
-                                menuActions = listOf(
+                                // Touch and hold: start selecting (or select one more note)
+                                onLongClick = {
+                                    if (selectionMode) toggleSelected(note.id) else selectedIds = setOf(note.id)
+                                },
+                                selected = note.id in selectedIds,
+                                // No three-dot menu while selecting: the bar at the top has the actions
+                                menuActions = if (selectionMode) emptyList() else listOf(
                                     // Pinned notes are listed first. The list follows the repository,
                                     // so it reorders by itself.
                                     NoteMenuAction(
@@ -350,6 +484,10 @@ fun ElnorApp(
                                                 repository.setPinned(note.id, note.pinnedAt == null)
                                             }
                                         }
+                                    ),
+                                    NoteMenuAction(
+                                        label = "Archive",
+                                        onClick = { archiveNotes(listOf(note.id)) }
                                     ),
                                     NoteMenuAction(
                                         label = "Delete",
@@ -367,7 +505,7 @@ fun ElnorApp(
                                 verticalArrangement = Arrangement.spacedBy(13.dp),
                                 contentPadding = PaddingValues(bottom = 100.dp)
                             ) {
-                                items(visibleNotes, key = { it.id }) { note -> noteItem(note) }
+                                items(shownNotes, key = { it.id }) { note -> noteItem(note) }
                             }
                         } else {
                             // Two columns. Every card is as tall as its text, so they fit together.
@@ -379,12 +517,25 @@ fun ElnorApp(
                                 horizontalArrangement = Arrangement.spacedBy(13.dp),
                                 contentPadding = PaddingValues(bottom = 100.dp)
                             ) {
-                                items(visibleNotes, key = { it.id }) { note -> noteItem(note) }
+                                items(shownNotes, key = { it.id }) { note -> noteItem(note) }
                             }
                         }
                     }
                 }
             }
+        }
+
+        if (confirmDeleteSelected && selectionMode) {
+            DeleteNotesDialog(
+                count = selectedIds.size,
+                onConfirm = {
+                    val ids = selectedIds.toList()
+                    confirmDeleteSelected = false
+                    selectedIds = emptySet()
+                    ApplicationScope.scope.launch { repository.moveToTrashMany(ids) }
+                },
+                onDismiss = { confirmDeleteSelected = false }
+            )
         }
 
         val deleteId = pendingDeleteId
