@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
@@ -60,6 +61,19 @@ fun EditorScreen(
         val currentBody = bodyValue.text
         delay(150)
         stats = withContext(Dispatchers.Default) { noteStats(currentTitle, currentBody) }
+    }
+
+    // Links in the text (web, e-mail, phone). They are shown in the link colour. While the cursor is
+    // inside one and the text field has the focus, a button above the keyboard opens it.
+    val links = remember(bodyValue.text) { LinkDetector.find(bodyValue.text) }
+    val linkColor = MaterialTheme.colorScheme.primary
+    val linkHighlight = remember(links, linkColor) { LinkHighlightTransformation(links, linkColor) }
+    var bodyFocused by remember { mutableStateOf(false) }
+    val cursor = bodyValue.selection
+    val activeLink = if (bodyFocused && cursor.collapsed) {
+        LinkDetector.linkAtCursor(links, cursor.start)
+    } else {
+        null
     }
 
     // The delete button is only shown when the note exists in storage
@@ -245,7 +259,9 @@ fun EditorScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .focusRequester(bodyFocus),
+                    .focusRequester(bodyFocus)
+                    .onFocusChanged { bodyFocused = it.isFocused },
+                visualTransformation = linkHighlight,
                 textStyle = MaterialTheme.typography.bodyLarge,
                 placeholder = {
                     Text(
@@ -266,6 +282,17 @@ fun EditorScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp)
+                )
+            }
+
+            // Call / Email / Open, for the link the cursor is in
+            if (activeLink != null) {
+                LinkActionBar(
+                    link = activeLink,
+                    onClick = {
+                        AppLock.expectExternalScreen() // the dialer / browser is not "leaving" Elnor
+                        openLink(context, activeLink)
+                    }
                 )
             }
 

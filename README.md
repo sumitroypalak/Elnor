@@ -10,6 +10,7 @@ Features
 - "Last edited" date and time under the title of a note
 - Word and character count under the text of a note, e.g. "12 words · 68 characters" (works for Bengali too)
 - Share a note (share button at the top of the note page: send the title and text to WhatsApp, e-mail, messages or any other app)
+- Links in a note are found by themselves: web links (http://, https://, www.), e-mail addresses and phone numbers (also Bengali digits) are shown in colour with an underline. Put the cursor in one and a button above the keyboard appears: Open, Email or Call (Call opens the dialer with the number filled in; you press call yourself). Nothing is stored, the links follow the text
 - Copy the text of a note (copy button at the top of the note page: title and text go to the clipboard)
 - Side menu (hamburger button): large app name and outlined icon rows for Settings and Trash, with a rounded highlight on the pressed row
 - Pin notes: "Pin" in the three-dot menu of a note keeps it at the top of the list ("Unpin" to undo)
