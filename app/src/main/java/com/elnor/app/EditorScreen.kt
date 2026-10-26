@@ -67,13 +67,32 @@ fun EditorScreen(
     // inside one and the text field has the focus, a button above the keyboard opens it.
     val links = remember(bodyValue.text) { LinkDetector.find(bodyValue.text) }
     val linkColor = MaterialTheme.colorScheme.primary
-    val linkHighlight = remember(links, linkColor) { LinkHighlightTransformation(links, linkColor) }
+    // Formatting (bold, headings, lists) is written as Markdown in the text itself. The editor shows
+    // it styled and keeps the marks visible but dimmed.
+    val formatSpans = remember(bodyValue.text) { MarkdownFormat.parse(bodyValue.text) }
+    val markerColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+    val textStyling = remember(links, formatSpans, linkColor, markerColor) {
+        NoteTextTransformation(links, formatSpans, linkColor, markerColor)
+    }
     var bodyFocused by remember { mutableStateOf(false) }
     val cursor = bodyValue.selection
     val activeLink = if (bodyFocused && cursor.collapsed) {
         LinkDetector.linkAtCursor(links, cursor.start)
     } else {
         null
+    }
+
+    // A formatting button: [change] gets the text and the selection and returns the new text. The
+    // page shows it and the ViewModel remembers it (saved after a typing pause, like typing).
+    fun applyFormat(change: (String, Int, Int) -> TextEdit) {
+        val selection = bodyValue.selection
+        val result = change(
+            bodyValue.text,
+            minOf(selection.start, selection.end),
+            maxOf(selection.start, selection.end)
+        )
+        bodyValue = TextFieldValue(result.text, TextRange(result.selStart, result.selEnd))
+        viewModel.onBodyChange(result.text, result.selStart, result.selEnd)
     }
 
     // The delete button is only shown when the note exists in storage
@@ -253,15 +272,26 @@ fun EditorScreen(
             TextField(
                 value = bodyValue,
                 onValueChange = {
-                    bodyValue = it
-                    viewModel.onBodyChange(it.text, it.selection.start, it.selection.end) // saved after a typing pause
+                    // Enter inside a list starts the next item (or ends the list on an empty item)
+                    val listEdit = if (it.selection.collapsed) {
+                        MarkdownFormat.afterNewline(bodyValue.text, it.text, it.selection.start)
+                    } else {
+                        null
+                    }
+                    val next = if (listEdit != null) {
+                        TextFieldValue(listEdit.text, TextRange(listEdit.selStart, listEdit.selEnd))
+                    } else {
+                        it
+                    }
+                    bodyValue = next
+                    viewModel.onBodyChange(next.text, next.selection.start, next.selection.end) // saved after a typing pause
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .focusRequester(bodyFocus)
                     .onFocusChanged { bodyFocused = it.isFocused },
-                visualTransformation = linkHighlight,
+                visualTransformation = textStyling,
                 textStyle = MaterialTheme.typography.bodyLarge,
                 placeholder = {
                     Text(
@@ -282,6 +312,16 @@ fun EditorScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp)
+                )
+            }
+
+            // Bold, heading and list buttons for the text (not for the title)
+            if (bodyFocused) {
+                FormatToolbar(
+                    onBold = { applyFormat(MarkdownFormat::toggleBold) },
+                    onHeading = { applyFormat(MarkdownFormat::cycleHeading) },
+                    onBullet = { applyFormat(MarkdownFormat::toggleBullet) },
+                    onNumbered = { applyFormat(MarkdownFormat::toggleNumbered) }
                 )
             }
 

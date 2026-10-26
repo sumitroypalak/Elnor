@@ -248,14 +248,14 @@ private fun ArchivedNoteCard(
             Modifier.padding(start = 20.dp, top = 20.dp, end = 12.dp, bottom = 8.dp)
         ) {
             Text(
-                getDisplayTitle(note),
+                MarkdownFormat.plainLine(getDisplayTitle(note)),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            val preview = getPreviewBody(note)
+            val preview = MarkdownFormat.plainText(getPreviewBody(note))
             if (preview.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Text(

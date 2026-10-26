@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
@@ -29,27 +30,45 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
- * Shows the links of a note in the link colour with an underline. It only changes how the text
- * looks: the text itself, the cursor and the selection stay exactly as they are (the offsets are
- * the same before and after), so typing and saving are not affected.
+ * Shows the text of a note styled while it is edited: the links in the link colour with an
+ * underline, and the formatting ([MarkdownFormat]): bold words, bigger headings, and the marks
+ * (** # - 1.) dimmed. It only changes how the text looks: the text itself, the cursor and the
+ * selection stay exactly as they are (the offsets are the same before and after), so typing and
+ * saving are not affected.
  */
-class LinkHighlightTransformation(
+class NoteTextTransformation(
     private val links: List<LinkSpan>,
-    private val color: Color
+    private val format: List<MarkdownFormat.Span>,
+    private val linkColor: Color,
+    private val markerColor: Color
 ) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
-        if (links.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
-        val style = SpanStyle(color = color, textDecoration = TextDecoration.Underline)
+        if (links.isEmpty() && format.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
+        val linkStyle = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
         val styled = buildAnnotatedString {
             append(text)
+            // Never go past the text, in case the text changed since the spans were calculated
+            for (span in format) {
+                if (span.start >= span.end || span.end > text.length) continue
+                addStyle(formatStyle(span.kind), span.start, span.end)
+            }
             for (link in links) {
-                // Never go past the text, in case the text changed since the links were calculated
-                if (link.end <= text.length) addStyle(style, link.start, link.end)
+                if (link.end <= text.length) addStyle(linkStyle, link.start, link.end)
             }
         }
         return TransformedText(styled, OffsetMapping.Identity)
+    }
+
+    // Headings stay a little smaller than the 24.sp line height of the text, so lines never overlap
+    private fun formatStyle(kind: MarkdownFormat.Kind): SpanStyle = when (kind) {
+        MarkdownFormat.Kind.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
+        MarkdownFormat.Kind.HEADING1 -> SpanStyle(fontWeight = FontWeight.Bold, fontSize = 22.sp)
+        MarkdownFormat.Kind.HEADING2 -> SpanStyle(fontWeight = FontWeight.Bold, fontSize = 19.sp)
+        MarkdownFormat.Kind.MARKER -> SpanStyle(color = markerColor)
+        MarkdownFormat.Kind.LIST_MARKER -> SpanStyle(color = linkColor, fontWeight = FontWeight.Bold)
     }
 }
 
