@@ -118,6 +118,66 @@ class MarkdownFormatTest {
         assertEquals(edit("**আমার** নোট", 2, 6), MarkdownFormat.toggleBold("আমার নোট", 0, 4))
     }
 
+    // ---- Bold button over several lines ----
+
+    @Test
+    fun bold_overSeveralLines_everyLineGetsItsOwnMarks() {
+        assertEquals(edit("**one**\n**two**", 2, 13), MarkdownFormat.toggleBold("one\ntwo", 0, 7))
+    }
+
+    @Test
+    fun bold_overSeveralLines_resultIsReallyBoldOnEveryLine() {
+        val result = MarkdownFormat.toggleBold("one\ntwo", 0, 7).text
+        val bold = MarkdownFormat.parse(result).filter { it.kind == Kind.BOLD }
+        assertEquals(listOf("one", "two"), bold.map { result.substring(it.start, it.end) })
+    }
+
+    @Test
+    fun bold_overSeveralLines_takesTheMarksAwayFromAllWhenAllAreBold() {
+        assertEquals(
+            edit("one\ntwo", 0, 7),
+            MarkdownFormat.toggleBold("**one**\n**two**", 0, 15)
+        )
+    }
+
+    @Test
+    fun bold_overSeveralLines_aMixMakesEveryLineBold() {
+        assertEquals(
+            edit("**one**\n**two**", 0, 13),
+            MarkdownFormat.toggleBold("**one**\ntwo", 0, 11)
+        )
+    }
+
+    @Test
+    fun bold_overSeveralLines_blankLinesStayBlank() {
+        assertEquals(edit("**a**\n\n**b**", 2, 10), MarkdownFormat.toggleBold("a\n\nb", 0, 4))
+    }
+
+    @Test
+    fun bold_overSeveralLines_aTrailingLineBreakIsLeftOut() {
+        assertEquals(edit("**a**\n**b**\n", 2, 9), MarkdownFormat.toggleBold("a\nb\n", 0, 4))
+    }
+
+    @Test
+    fun bold_overAList_keepsTheListMarksOutside() {
+        assertEquals(
+            edit("- **a**\n- **b**", 4, 13),
+            MarkdownFormat.toggleBold("- a\n- b", 0, 7)
+        )
+        assertEquals(edit("1. **a**", 5, 6), MarkdownFormat.toggleBold("1. a", 0, 4))
+    }
+
+    @Test
+    fun bold_inAHeading_keepsTheHeadingMarkOutside() {
+        assertEquals(edit("# **Title**", 4, 9), MarkdownFormat.toggleBold("# Title", 0, 7))
+    }
+
+    @Test
+    fun bold_onlyAMarkSelected_changesNothing() {
+        assertEquals(edit("- a", 0, 1), MarkdownFormat.toggleBold("- a", 0, 1))
+        assertEquals(edit("- a", 0, 0), MarkdownFormat.toggleBold("- a", 0, 0))
+    }
+
     // ---- Heading button ----
 
     @Test

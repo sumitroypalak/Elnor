@@ -83,11 +83,18 @@ object MarkdownFormat {
      * Bold button. With a selection: puts ** around it, or takes them away when it is already
      * bold. Without a selection: bolds the word at the cursor, or, when the cursor is not on a
      * word, puts **** there with the cursor in the middle, ready to type.
+     *
+     * Bold works line by line (see [parse]), so a selection over several lines gets its own ** on
+     * every line. Blank lines, spaces at the edges of a line, and the mark of a heading or a list
+     * item ("# ", "- ", "1. ") are left outside the **. When every line is already bold the **
+     * are taken away from all of them, otherwise every line becomes bold.
      * [selStart] must not be bigger than [selEnd].
      */
     fun toggleBold(text: String, selStart: Int, selEnd: Int): TextEdit {
-        var s = selStart.coerceIn(0, text.length)
-        var e = selEnd.coerceIn(s, text.length)
+        val originalStart = selStart.coerceIn(0, text.length)
+        val originalEnd = selEnd.coerceIn(originalStart, text.length)
+        var s = originalStart
+        var e = originalEnd
 
         if (s == e) {
             // Nothing selected: use the word (the non-space characters) around the cursor
@@ -105,23 +112,87 @@ object MarkdownFormat {
             if (s == e) return insertAtCursor(text, s, "****", 2)
         }
 
-        val selected = text.substring(s, e)
-        return when {
-            // The marks are just outside the selection: take them away
-            s >= 2 && e + 2 <= text.length && text.startsWith("**", s - 2) && text.startsWith("**", e) ->
-                TextEdit(text.removeRange(e, e + 2).removeRange(s - 2, s), s - 2, e - 2)
+        val segments = boldSegments(text, s, e)
+        // Only a list or heading mark was selected: nothing to make bold
+        if (segments.isEmpty()) return TextEdit(text, originalStart, originalEnd)
 
-            // The marks are inside the selection: take them away
-            selected.length >= 4 && selected.startsWith("**") && selected.endsWith("**") ->
-                TextEdit(
-                    text.substring(0, s) + selected.substring(2, selected.length - 2) + text.substring(e),
-                    s,
-                    e - 4
-                )
+        val allBold = segments.all { isBold(text, it.first, it.second) }
+        val out = StringBuilder(text.length + 8 * segments.size)
+        var position = 0
+        var newStart = 0
+        var newEnd = 0
+        for ((index, segment) in segments.withIndex()) {
+            val (a, b) = segment
+            val selected = text.substring(a, b)
+            val change = when {
+                // The marks are just outside the segment: take them away
+                allBold && marksOutside(text, a, b) ->
+                    BoldChange(a - 2, b + 2, selected, 0, selected.length)
 
-            else -> TextEdit(text.substring(0, s) + "**" + selected + "**" + text.substring(e), s + 2, e + 2)
+                // The marks are inside the segment: take them away
+                allBold -> {
+                    val inner = selected.substring(2, selected.length - 2)
+                    BoldChange(a, b, inner, 0, inner.length)
+                }
+
+                // Already bold while the other lines are not: it stays as it is
+                isBold(text, a, b) -> BoldChange(a, b, selected, 0, selected.length)
+
+                else -> BoldChange(a, b, "**$selected**", 2, 2 + selected.length)
+            }
+            out.append(text, position, change.replaceStart)
+            if (index == 0) newStart = out.length + change.innerStart
+            out.append(change.replacement)
+            newEnd = out.length - (change.replacement.length - change.innerEnd)
+            position = change.replaceEnd
         }
+        out.append(text, position, text.length)
+        return TextEdit(out.toString(), newStart, newEnd)
     }
+
+    /** The part [replaceStart, replaceEnd) of the text becomes [replacement]; the inner part is what stays selected. */
+    private class BoldChange(
+        val replaceStart: Int,
+        val replaceEnd: Int,
+        val replacement: String,
+        val innerStart: Int,
+        val innerEnd: Int
+    )
+
+    private fun marksOutside(text: String, start: Int, end: Int): Boolean =
+        start >= 2 && end + 2 <= text.length && text.startsWith("**", start - 2) && text.startsWith("**", end)
+
+    private fun isBold(text: String, start: Int, end: Int): Boolean =
+        marksOutside(text, start, end) ||
+            (end - start >= 4 && text.startsWith("**", start) && text.startsWith("**", end - 2))
+
+    /**
+     * The pieces of [start, end) that can be bold, one per line: without the heading / list mark
+     * at the start of the line and without spaces at both edges. Blank lines give no piece.
+     */
+    private fun boldSegments(text: String, start: Int, end: Int): List<Pair<Int, Int>> {
+        val result = ArrayList<Pair<Int, Int>>()
+        var lineStart = text.lastIndexOf('\n', start - 1) + 1
+        while (true) {
+            var lineEnd = text.indexOf('\n', lineStart)
+            if (lineEnd < 0) lineEnd = text.length
+            val markLength = blockMarkLength(text.substring(lineStart, lineEnd))
+
+            var a = maxOf(start, lineStart + markLength)
+            var b = minOf(end, lineEnd)
+            while (a < b && text[a].isWhitespace()) a++
+            while (b > a && text[b - 1].isWhitespace()) b--
+            if (a < b) result.add(a to b)
+
+            if (lineEnd >= end) break
+            lineStart = lineEnd + 1
+        }
+        return result
+    }
+
+    /** How many characters at the start of [line] are a heading mark, or the indent and mark of a list item. */
+    private fun blockMarkLength(line: String): Int =
+        (HEADING.find(line) ?: BULLET.find(line) ?: NUMBER.find(line))?.value?.length ?: 0
 
     /** Heading button: the line of the cursor (every selected line) goes plain -> # -> ## -> plain. */
     fun cycleHeading(text: String, selStart: Int, selEnd: Int): TextEdit =
