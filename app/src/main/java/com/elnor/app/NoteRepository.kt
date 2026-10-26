@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /** The default of [NoteRepository.notesLoaded] for a repository that has its notes at once. */
@@ -35,8 +36,12 @@ interface NoteRepository {
     /** Notes in the Trash, the most recently deleted first. Updates by itself. */
     val trashedNotes: Flow<List<Note>>
 
+    /** Archived notes (not in the Trash), the most recently archived first. Updates by itself. */
+    val archivedNotes: Flow<List<Note>> get() = flowOf(emptyList())
+
     /**
-     * Notes (not in the Trash) that contain [query] in the title or body, newest first.
+     * Notes (not in the Trash, archived ones too) that contain [query] in the title or body, newest first.
+     * A blank query gives the home list, which has no archived notes.
      * Upper/lower case, and different ways of writing the same letter, do not matter. A blank
      * query gives all notes. % _ and \ in [query] are searched as normal characters.
      */
@@ -78,6 +83,25 @@ interface NoteRepository {
      * note, or a note in the Trash, does nothing. The text and updatedAt are not changed.
      */
     suspend fun setPinned(id: Long, pinned: Boolean)
+
+    /** [moveToTrash] for many notes at once. Ids that do not exist or are already in the Trash are skipped. */
+    suspend fun moveToTrashMany(ids: List<Long>) {
+        for (id in ids) moveToTrash(id)
+    }
+
+    /** [setPinned] for many notes at once. */
+    suspend fun setPinnedMany(ids: List<Long>, pinned: Boolean) {
+        for (id in ids) setPinned(id, pinned)
+    }
+
+    /**
+     * Moves normal notes to the Archive: they leave the home list and the search. The text, the
+     * dates and the pin are not changed. Notes that are in the Trash or already archived are skipped.
+     */
+    suspend fun archiveMany(ids: List<Long>) {}
+
+    /** Brings archived notes back to the home list, exactly as they were. */
+    suspend fun unarchiveMany(ids: List<Long>) {}
 
     /** Takes the note out of the Trash, exactly as it was. Does nothing if it is not there. */
     suspend fun restore(id: Long)

@@ -13,17 +13,22 @@ private const val LIST_ORDER = "pinnedAt IS NULL, pinnedAt DESC, updatedAt DESC"
 
 /**
  * A note is either a normal note (deletedAt IS NULL) or a note in the Trash (deletedAt is the
- * time it was deleted). Every query for the home list and for search only returns normal notes,
- * so a note in the Trash never shows up there.
+ * time it was deleted). A normal note can also be archived (archivedAt is the time it was
+ * archived). The home list only returns normal notes that are not archived. Search also finds
+ * archived notes (the home screen marks them), and no query returns a note in the Trash.
  */
 @Dao
 interface NoteDao {
 
-    @Query("SELECT * FROM notes WHERE deletedAt IS NULL ORDER BY $LIST_ORDER")
+    @Query("SELECT * FROM notes WHERE deletedAt IS NULL AND archivedAt IS NULL ORDER BY $LIST_ORDER")
     fun observeAll(): Flow<List<NoteEntity>>
 
-    @Query("SELECT * FROM notes WHERE deletedAt IS NULL ORDER BY $LIST_ORDER")
+    @Query("SELECT * FROM notes WHERE deletedAt IS NULL AND archivedAt IS NULL ORDER BY $LIST_ORDER")
     suspend fun getAll(): List<NoteEntity>
+
+    /** Archived notes that are not in the Trash, the most recently archived first. */
+    @Query("SELECT * FROM notes WHERE deletedAt IS NULL AND archivedAt IS NOT NULL ORDER BY archivedAt DESC")
+    fun observeArchived(): Flow<List<NoteEntity>>
 
     /** Notes in the Trash, the most recently deleted first. */
     @Query("SELECT * FROM notes WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
@@ -79,6 +84,33 @@ interface NoteDao {
     /** Takes a note out of the Trash. Title, body and updatedAt were never changed. */
     @Query("UPDATE notes SET deletedAt = NULL WHERE id = :id")
     suspend fun restore(id: Long)
+
+    // ---- Several notes at once (the selection on the home screen, the Archive screen) ----
+    // The caller keeps each list short (see RoomNoteRepository), SQLite allows few variables.
+
+    /** Same as [moveToTrash] for many notes. */
+    @Query("UPDATE notes SET deletedAt = :deletedAt, pinnedAt = NULL WHERE id IN (:ids) AND deletedAt IS NULL")
+    suspend fun moveToTrashMany(ids: List<Long>, deletedAt: Long)
+
+    /** Pins normal notes that are not pinned yet. Pinned ones keep their place. */
+    @Query(
+        "UPDATE notes SET pinnedAt = :pinnedAt WHERE id IN (:ids) " +
+            "AND deletedAt IS NULL AND archivedAt IS NULL AND pinnedAt IS NULL"
+    )
+    suspend fun pinMany(ids: List<Long>, pinnedAt: Long)
+
+    @Query("UPDATE notes SET pinnedAt = NULL WHERE id IN (:ids)")
+    suspend fun unpinMany(ids: List<Long>)
+
+    /** Archives normal notes. Title, body, updatedAt and the pin are not touched. */
+    @Query(
+        "UPDATE notes SET archivedAt = :archivedAt WHERE id IN (:ids) " +
+            "AND deletedAt IS NULL AND archivedAt IS NULL"
+    )
+    suspend fun archiveMany(ids: List<Long>, archivedAt: Long)
+
+    @Query("UPDATE notes SET archivedAt = NULL WHERE id IN (:ids)")
+    suspend fun unarchiveMany(ids: List<Long>)
 
     /** Removes the row for good. Only the Trash screen uses this. */
     @Query("DELETE FROM notes WHERE id = :id")

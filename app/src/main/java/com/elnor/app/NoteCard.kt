@@ -2,9 +2,13 @@
 
 package com.elnor.app
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Delete
@@ -12,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,27 +39,38 @@ data class NoteMenuAction(
  * One note in the list. Also used by FontAuditPreview.
  * [menuActions] are the entries of the three-dot menu in the top right corner of the card.
  * With no entries (the default) the menu button is not shown.
+ *
+ * [onLongClick] is called when the card is pressed and held (the home screen starts the
+ * selection of notes with it). [selected] draws the card as chosen: a border and a check mark.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NoteCard(
     note: Note,
     cardColor: Color,
     dark: Boolean,
     onClick: () -> Unit,
-    menuActions: List<NoteMenuAction> = emptyList()
+    menuActions: List<NoteMenuAction> = emptyList(),
+    onLongClick: (() -> Unit)? = null,
+    selected: Boolean = false
 ) {
     val hasMenu = menuActions.isNotEmpty()
+    val shape = MaterialTheme.shapes.extraLarge
 
+    // Not Card(onClick = ...): that one has no long press. The clip makes the press ripple round.
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = shape,
         colors = CardDefaults.cardColors(
             containerColor = cardColor
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 0.dp
-        )
+        ),
+        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
     ) {
         // fillMaxWidth: the Box is always as wide as the card, not only as wide as the text.
         // Then the menu button below (TopEnd) stays at the same place for every title length.
@@ -90,6 +106,16 @@ fun NoteCard(
                         Text("\uD83D\uDCCC", fontSize = 12.sp)
                         Spacer(Modifier.width(6.dp))
                     }
+                    // Only shown where archived notes are mixed with the others (search results)
+                    if (note.archivedAt != null) {
+                        Text(
+                            "Archived",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (dark) MaterialTheme.colorScheme.primary else Color(0xFF4B3FA0)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Text(
                         formatNoteDate(note.updatedAt),
                         style = MaterialTheme.typography.labelSmall,
@@ -106,6 +132,17 @@ fun NoteCard(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = 12.dp, end = 4.dp)
+                )
+            }
+
+            if (selected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 16.dp, end = 16.dp)
                 )
             }
         }
@@ -152,6 +189,40 @@ private fun NoteOverflowMenu(
             }
         }
     }
+}
+
+/** "Delete N notes?" for the selection on the home screen. Same Trash rule as [DeleteNoteDialog]. */
+@Composable
+internal fun DeleteNotesDialog(
+    count: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (count == 1) "Delete note?" else "Delete $count notes?", fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Text(
+                (if (count == 1) "This note" else "These notes") +
+                    " will be moved to Trash. You can restore " +
+                    (if (count == 1) "it" else "them") +
+                    " within $TRASH_RETENTION_DAYS days. After that " +
+                    (if (count == 1) "it is" else "they are") + " deleted for good."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 /**

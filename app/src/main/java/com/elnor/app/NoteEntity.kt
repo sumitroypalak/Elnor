@@ -20,6 +20,9 @@ import androidx.room.PrimaryKey
  * - [pinnedAt] is null for a normal note. A pinned note has the time it was pinned. Pinned notes
  *   are listed first (the most recently pinned on top). A note that goes to the Trash is unpinned.
  *   Saving the text never changes it.
+ * - [archivedAt] is null for a normal note. An archived note has the time it was archived. It is
+ *   kept out of the home list and the search, and shown on the Archive screen. Nothing else of
+ *   the note changes (a pin stays too), so unarchiving puts everything back exactly as it was.
  */
 @Entity(tableName = "notes")
 data class NoteEntity(
@@ -29,7 +32,8 @@ data class NoteEntity(
     val updatedAt: Long,
     val searchText: String,
     val deletedAt: Long? = null,
-    val pinnedAt: Long? = null
+    val pinnedAt: Long? = null,
+    val archivedAt: Long? = null
 )
 
 fun NoteEntity.toNote(): Note = Note(
@@ -38,7 +42,8 @@ fun NoteEntity.toNote(): Note = Note(
     body = body,
     updatedAt = updatedAt,
     deletedAt = deletedAt,
-    pinnedAt = pinnedAt
+    pinnedAt = pinnedAt,
+    archivedAt = archivedAt
 )
 
 fun Note.toEntity(): NoteEntity = NoteEntity(
@@ -48,5 +53,6 @@ fun Note.toEntity(): NoteEntity = NoteEntity(
     updatedAt = updatedAt,
     searchText = SearchText.build(title, body),
     deletedAt = deletedAt,
-    pinnedAt = pinnedAt
+    pinnedAt = pinnedAt,
+    archivedAt = archivedAt
 )

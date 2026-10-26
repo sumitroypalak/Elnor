@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 // ----------------------------- Side menu -----------------------------------
 
 /**
- * The side menu with Settings and Trash. The menu button is at the top right, so the menu also
+ * The side menu with Settings, Archive and Trash. The menu button is at the top right, so the menu also
  * comes in from the right (the end of the screen). ModalNavigationDrawer always opens from the
  * start side, so its layout direction is turned around, and turned back for everything inside.
  * Tapping outside the menu, swiping it away or pressing Back closes it.
@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 internal fun EndDrawer(
     drawerState: DrawerState,
     onOpenSettings: () -> Unit,
+    onOpenArchive: () -> Unit,
     onOpenTrash: () -> Unit,
     content: @Composable () -> Unit
 ) {
@@ -63,6 +64,11 @@ internal fun EndDrawer(
                             label = "Settings",
                             icon = Icons.Outlined.Settings,
                             onClick = onOpenSettings
+                        )
+                        DrawerItem(
+                            label = "Archive",
+                            icon = ArchiveIcon,
+                            onClick = onOpenArchive
                         )
                         DrawerItem(
                             label = "Trash",

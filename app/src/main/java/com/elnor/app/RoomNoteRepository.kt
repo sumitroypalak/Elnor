@@ -37,6 +37,9 @@ class RoomNoteRepository(
     override val trashedNotes: Flow<List<Note>> = dao.observeTrashed()
         .map { list -> list.map { it.toNote() } }
 
+    override val archivedNotes: Flow<List<Note>> = dao.observeArchived()
+        .map { list -> list.map { it.toNote() } }
+
     override fun search(query: String): Flow<List<Note>> {
         if (query.isBlank()) return notes
         return dao.search(SearchText.toLikeTerm(query))
@@ -88,6 +91,29 @@ class RoomNoteRepository(
         if (pinned) dao.pin(id, now()) else dao.unpin(id)
     }
 
+    // SQLite allows a limited number of variables in one statement, so long lists are cut in pieces.
+    // Every piece gets the same time, so the notes of one action stay together in the list.
+    override suspend fun moveToTrashMany(ids: List<Long>) {
+        val at = now()
+        for (chunk in ids.distinct().chunked(BATCH_SIZE)) dao.moveToTrashMany(chunk, at)
+    }
+
+    override suspend fun setPinnedMany(ids: List<Long>, pinned: Boolean) {
+        val at = now()
+        for (chunk in ids.distinct().chunked(BATCH_SIZE)) {
+            if (pinned) dao.pinMany(chunk, at) else dao.unpinMany(chunk)
+        }
+    }
+
+    override suspend fun archiveMany(ids: List<Long>) {
+        val at = now()
+        for (chunk in ids.distinct().chunked(BATCH_SIZE)) dao.archiveMany(chunk, at)
+    }
+
+    override suspend fun unarchiveMany(ids: List<Long>) {
+        for (chunk in ids.distinct().chunked(BATCH_SIZE)) dao.unarchiveMany(chunk)
+    }
+
     override suspend fun restore(id: Long) {
         dao.restore(id)
     }
@@ -119,6 +145,9 @@ class RoomNoteRepository(
     }
 
     companion object {
+        /** Ids per statement for the "many notes" queries. */
+        private const val BATCH_SIZE = 500
+
         @Volatile
         private var instance: RoomNoteRepository? = null
 
@@ -130,7 +159,7 @@ class RoomNoteRepository(
 
         private fun create(appContext: Context): RoomNoteRepository {
             val database = Room.databaseBuilder(appContext, AppDatabase::class.java, "elnor_notes_room.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .addCallback(LegacyNotesImport(appContext))
                 .build()
             return RoomNoteRepository(database.noteDao(), ApplicationScope.scope)

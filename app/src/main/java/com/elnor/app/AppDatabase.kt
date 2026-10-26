@@ -14,10 +14,20 @@ import org.json.JSONArray
  * Version 2: adds the searchText column (see SearchText).
  * Version 3: adds the deletedAt column (the Trash, see NoteEntity).
  * Version 4: adds the pinnedAt column (pinned notes, see NoteEntity).
+ * Version 5: adds the archivedAt column (the Archive, see NoteEntity).
  */
-@Database(entities = [NoteEntity::class], version = 4, exportSchema = false)
+@Database(entities = [NoteEntity::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
+}
+
+/**
+ * Adds archivedAt. It is empty (NULL) for every note that already exists, so no old note is archived.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE notes ADD COLUMN archivedAt INTEGER")
+    }
 }
 
 /**

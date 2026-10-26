@@ -12,7 +12,9 @@ data class Note(
     val updatedAt: Long,
     val deletedAt: Long? = null,
     /** null for a normal note. A pinned note has the time it was pinned and is shown first. */
-    val pinnedAt: Long? = null
+    val pinnedAt: Long? = null,
+    /** null for a normal note. An archived note has the time it was archived and is not on the home list. */
+    val archivedAt: Long? = null
 )
 
 private const val UNTITLED_NOTE = "Untitled note"
