@@ -15,7 +15,7 @@ Features
 - Side menu (hamburger button): large app name and outlined icon rows for Settings and Trash, with a rounded highlight on the pressed row
 - Sort notes (sort button next to "Your notes", remembered): last edited newest or oldest first, or by title A to Z or Z to A. Pinned notes always stay first
 - Select many notes: touch and hold a note, then tap more notes. The bar at the top then has Pin / Unpin, Archive and Delete for all selected notes at once, and "Select all" in its three-dot menu. Back or the X ends the selection
-- Archive: keep a note without seeing it on the home screen (three-dot menu of a note, or the selection bar). Archived notes are not in the list or the search; open them from the side menu > Archive, where a note can be unarchived or deleted. "Undo" appears right after archiving
+- Archive: keep a note without seeing it on the home screen (three-dot menu of a note, or the selection bar). Archived notes are not in the home list, but the search finds them (marked "Archived"). Open them from the side menu > Archive: search there, tap a note to read and edit it (it stays archived), unarchive it or delete it. "Undo" appears right after archiving
 - Pin notes: "Pin" in the three-dot menu of a note keeps it at the top of the list ("Unpin" to undo)
 - Show notes as a list or as a two-column grid (button next to "Your notes", remembered)
 - Delete notes (they go to the Trash first)

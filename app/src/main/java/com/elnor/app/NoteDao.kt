@@ -14,8 +14,8 @@ private const val LIST_ORDER = "pinnedAt IS NULL, pinnedAt DESC, updatedAt DESC"
 /**
  * A note is either a normal note (deletedAt IS NULL) or a note in the Trash (deletedAt is the
  * time it was deleted). A normal note can also be archived (archivedAt is the time it was
- * archived). Every query for the home list and for search only returns normal notes that are not
- * archived, so a note in the Trash or in the Archive never shows up there.
+ * archived). The home list only returns normal notes that are not archived. Search also finds
+ * archived notes (the home screen marks them), and no query returns a note in the Trash.
  */
 @Dao
 interface NoteDao {
@@ -39,7 +39,7 @@ interface NoteDao {
      * % _ \ escaped with a backslash. Never pass raw user text here.
      */
     @Query(
-        "SELECT * FROM notes WHERE deletedAt IS NULL AND archivedAt IS NULL " +
+        "SELECT * FROM notes WHERE deletedAt IS NULL " +
             "AND searchText LIKE '%' || :escapedQuery || '%' ESCAPE '\\' " +
             "ORDER BY " + LIST_ORDER
     )

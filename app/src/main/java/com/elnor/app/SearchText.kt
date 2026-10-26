@@ -34,6 +34,14 @@ object SearchText {
         return result.toString()
     }
 
+    /**
+     * True when the note ([title] and [body]) contains [query], the same way the database search
+     * decides it (same normalization, so case and different spellings of a letter do not matter).
+     * A blank query matches everything. Used where the notes are already in memory (the Archive).
+     */
+    fun matches(title: String, body: String, query: String): Boolean =
+        query.isBlank() || build(title, body).contains(normalize(query))
+
     /** What the user typed -> the text to give to the DAO query (normalized, then escaped). */
     fun toLikeTerm(query: String): String = escapeLike(normalize(query))
 }

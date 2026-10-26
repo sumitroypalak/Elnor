@@ -32,13 +32,16 @@ internal fun selectionTitle(count: Int): String =
 /**
  * The top bar of the home screen while one or more notes are selected (touch and hold a note to
  * start). It replaces the normal bar: close the selection, [onTogglePin] (Pin, or Unpin when every
- * selected note is already pinned, see [allPinned]), [onArchive], [onDelete] and, in the
- * three-dot menu, [onSelectAll].
+ * selected note is already pinned, see [allPinned]; not shown when [canPin] is false, that is when
+ * only archived notes are selected), [onArchive] (Unarchive when [allArchived]), [onDelete] and,
+ * in the three-dot menu, [onSelectAll].
  */
 @Composable
 internal fun SelectionTopBar(
     count: Int,
+    canPin: Boolean,
     allPinned: Boolean,
+    allArchived: Boolean,
     containerColor: Color,
     onClose: () -> Unit,
     onTogglePin: () -> Unit,
@@ -56,8 +59,10 @@ internal fun SelectionTopBar(
             }
         },
         actions = {
-            TextButton(onClick = onTogglePin) { Text(if (allPinned) "Unpin" else "Pin") }
-            TextButton(onClick = onArchive) { Text("Archive") }
+            if (canPin) {
+                TextButton(onClick = onTogglePin) { Text(if (allPinned) "Unpin" else "Pin") }
+            }
+            TextButton(onClick = onArchive) { Text(if (allArchived) "Unarchive" else "Archive") }
             IconButton(onClick = onDelete) {
                 Icon(
                     Icons.Default.Delete,

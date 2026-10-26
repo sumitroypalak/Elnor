@@ -216,6 +216,7 @@ fun ElnorRoot(
                         BackHandler { screen = AppScreen.HOME }
                         ArchiveScreen(
                             repository = repository,
+                            editorViewModel = editorViewModel,
                             onBack = { screen = AppScreen.HOME }
                         )
                     }

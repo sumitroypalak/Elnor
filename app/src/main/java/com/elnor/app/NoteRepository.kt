@@ -40,7 +40,8 @@ interface NoteRepository {
     val archivedNotes: Flow<List<Note>> get() = flowOf(emptyList())
 
     /**
-     * Notes (not in the Trash) that contain [query] in the title or body, newest first.
+     * Notes (not in the Trash, archived ones too) that contain [query] in the title or body, newest first.
+     * A blank query gives the home list, which has no archived notes.
      * Upper/lower case, and different ways of writing the same letter, do not matter. A blank
      * query gives all notes. % _ and \ in [query] are searched as normal characters.
      */

@@ -106,6 +106,16 @@ fun NoteCard(
                         Text("\uD83D\uDCCC", fontSize = 12.sp)
                         Spacer(Modifier.width(6.dp))
                     }
+                    // Only shown where archived notes are mixed with the others (search results)
+                    if (note.archivedAt != null) {
+                        Text(
+                            "Archived",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (dark) MaterialTheme.colorScheme.primary else Color(0xFF4B3FA0)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Text(
                         formatNoteDate(note.updatedAt),
                         style = MaterialTheme.typography.labelSmall,

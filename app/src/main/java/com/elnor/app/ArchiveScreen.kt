@@ -2,11 +2,15 @@
 
 package com.elnor.app
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -21,23 +25,65 @@ import kotlinx.coroutines.launch
 
 /**
  * The page the "Archive" menu item opens. It lists the notes that were archived: notes the user
- * wants to keep but not see on the home screen every day. A note can be unarchived (it goes back
- * to the home list exactly as it was, also pinned if it was pinned) or deleted (it goes to the
- * Trash). Archived notes are not shown on the home screen or in the search.
+ * wants to keep but not see on the home screen every day.
+ *  - The search box above the list finds archived notes (the home search finds them too, marked
+ *    "Archived").
+ *  - Tapping a note opens it in the editor, like on the home screen. It stays archived while it
+ *    is edited.
+ *  - A note can be unarchived (it goes back to the home list exactly as it was, also pinned if it
+ *    was pinned) or deleted (it goes to the Trash).
  *
  * Changes are sent through [ApplicationScope], like saves in the editor, so leaving this page at
- * the same moment cannot cancel them half-way.
+ * the same moment cannot cancel them half-way. The editor is the same [editorViewModel] as on the
+ * home screen (only one of the two screens is open at a time).
  */
 @Composable
 internal fun ArchiveScreen(
     repository: NoteRepository,
+    editorViewModel: NoteEditorViewModel,
     onBack: () -> Unit
 ) {
     val bgColor = MaterialTheme.colorScheme.background
     // null until the first list is read, so "Archive is empty" does not flash on the screen
     val archived by repository.archivedNotes.collectAsState<List<Note>, List<Note>?>(initial = null)
     var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    // The note that is open in the editor (by id). Kept when the screen is recreated.
+    var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     val notes = archived
+
+    val openId = editingId
+    if (openId != null) {
+        val editing = notes?.firstOrNull { it.id == openId }
+        when {
+            // The page came back after the app was closed: wait for the notes, so the note that
+            // was open is found and not mistaken for a new one
+            notes == null -> Box(
+                Modifier.fillMaxSize().background(bgColor),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+
+            // The note is gone (deleted or unarchived meanwhile): back to the list
+            editing == null -> {
+                LaunchedEffect(openId) { editingId = null }
+                Box(Modifier.fillMaxSize().background(bgColor))
+            }
+
+            else -> EditorScreen(
+                note = editing,
+                viewModel = editorViewModel,
+                onClose = { editingId = null }
+            )
+        }
+        return
+    }
+
+    // Archived notes that match the search (all of them while the search box is empty)
+    val shown = remember(notes, query) {
+        notes?.filter { SearchText.matches(it.title, it.body, query) }
+    }
 
     Scaffold(
         containerColor = bgColor,
@@ -56,64 +102,86 @@ internal fun ArchiveScreen(
             )
         }
     ) { padding ->
-        when {
-            // Still reading: show only the background
-            notes == null -> Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-            )
-
-            notes.isEmpty() -> Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    "Archive is empty",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Touch and hold a note on the home screen to select it, then choose Archive.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            // The search box is only useful when there is something to search
+            if (!notes.isNullOrEmpty()) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    placeholder = { Text("Search archived notes...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    // The clear button is only there while there is text
+                    trailingIcon = if (query.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    shape = CircleShape
                 )
             }
 
-            else -> LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(
-                    start = 20.dp,
-                    end = 20.dp,
-                    top = 8.dp,
-                    bottom = 32.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(13.dp)
-            ) {
-                item {
-                    Text(
-                        "Archived notes are kept here and stay out of your list and search. " +
-                            "Tap a note to read all of it.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
-                    )
-                }
-                items(notes, key = { it.id }) { note ->
-                    ArchivedNoteCard(
-                        note = note,
-                        onUnarchive = {
-                            ApplicationScope.scope.launch { repository.unarchiveMany(listOf(note.id)) }
-                        },
-                        onDelete = { pendingDeleteId = note.id }
-                    )
+            when {
+                // Still reading: show only the background
+                notes == null || shown == null -> Box(Modifier.weight(1f).fillMaxWidth())
+
+                notes.isEmpty() -> EmptyMessage(
+                    title = "Archive is empty",
+                    subtitle = "Touch and hold a note on the home screen to select it, " +
+                        "then choose Archive."
+                )
+
+                shown.isEmpty() -> EmptyMessage(
+                    title = "No notes found",
+                    subtitle = "Try searching with another word."
+                )
+
+                else -> LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(
+                        start = 20.dp,
+                        end = 20.dp,
+                        top = 8.dp,
+                        bottom = 32.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(13.dp)
+                ) {
+                    if (query.isBlank()) {
+                        item {
+                            Text(
+                                "Archived notes are kept here and stay out of your list. " +
+                                    "Tap a note to open and edit it.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+                            )
+                        }
+                    }
+                    items(shown, key = { it.id }) { note ->
+                        ArchivedNoteCard(
+                            note = note,
+                            onOpen = { editingId = note.id },
+                            onUnarchive = {
+                                ApplicationScope.scope.launch {
+                                    repository.unarchiveMany(listOf(note.id))
+                                }
+                            },
+                            onDelete = { pendingDeleteId = note.id }
+                        )
+                    }
                 }
             }
         }
@@ -131,17 +199,42 @@ internal fun ArchiveScreen(
     }
 }
 
-/** One archived note. Tapping the card shows the whole note (it is cut to a few lines otherwise). */
+/** A centred message in the rest of the screen (empty Archive, nothing found). */
+@Composable
+private fun ColumnScope.EmptyMessage(title: String, subtitle: String) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+        )
+    }
+}
+
+/** One archived note. Tapping the card opens it in the editor. */
 @Composable
 private fun ArchivedNoteCard(
     note: Note,
+    onOpen: () -> Unit,
     onUnarchive: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var expanded by rememberSaveable(note.id) { mutableStateOf(false) }
-
     Card(
-        onClick = { expanded = !expanded },
+        onClick = onOpen,
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
@@ -159,7 +252,7 @@ private fun ArchivedNoteCard(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = if (expanded) Int.MAX_VALUE else 2,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             val preview = getPreviewBody(note)
@@ -169,7 +262,7 @@ private fun ArchivedNoteCard(
                     preview,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    maxLines = if (expanded) Int.MAX_VALUE else 3,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
             }

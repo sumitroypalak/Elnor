@@ -57,7 +57,11 @@ fun ElnorApp(
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var homeTab by rememberSaveable { mutableStateOf(HomeTab.NOTE) }
     var editingNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
-    val editingNote = notes.firstOrNull { it.id == editingNoteId }
+    // An archived note can be opened too (it is a search result), so the editor looks in both
+    // lists. null until the Archive is read, so such a note is not mistaken for a new one.
+    val archivedNotes by repository.archivedNotes.collectAsState<List<Note>, List<Note>?>(initial = null)
+    val everyNote = remember(notes, archivedNotes) { notes + (archivedNotes ?: emptyList()) }
+    val editingNote = everyNote.firstOrNull { it.id == editingNoteId }
     // The note whose "Delete" was chosen in its three-dot menu (by id, never by list position)
     var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
 
@@ -120,9 +124,9 @@ fun ElnorApp(
 
     // A selected note that is gone (deleted somewhere else) is not selected any more. Only checked
     // when the notes are really loaded, so a selection restored after rotation is not lost.
-    LaunchedEffect(notes, notesLoaded) {
-        if (notesLoaded && notes.isNotEmpty() && selectedIds.isNotEmpty()) {
-            val existing = notes.mapTo(HashSet()) { it.id }
+    LaunchedEffect(everyNote, notesLoaded, archivedNotes) {
+        if (notesLoaded && archivedNotes != null && everyNote.isNotEmpty() && selectedIds.isNotEmpty()) {
+            val existing = everyNote.mapTo(HashSet()) { it.id }
             val kept = selectedIds.filterTo(HashSet()) { it in existing }
             if (kept.size != selectedIds.size) selectedIds = kept
         }
@@ -152,7 +156,7 @@ fun ElnorApp(
     }
 
     if (editorOpen) {
-        if (editingNoteId != null && !notesLoaded) {
+        if (editingNoteId != null && (!notesLoaded || (editingNote == null && archivedNotes == null))) {
             // The page came back after the app was closed: wait for the notes, so the note that
             // was open is found and not mistaken for a new one
             Box(Modifier.fillMaxSize().background(bgColor), contentAlignment = Alignment.Center) {
@@ -188,23 +192,33 @@ fun ElnorApp(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
                   if (selectionMode) {
+                    // The selected notes. An archived note (a search result) cannot be pinned, and
+                    // "Archive" does nothing for it, so those actions only look at the other notes.
+                    val selectedNotes = everyNote.filter { it.id in selectedIds }
+                    val pinTargets = selectedNotes.filter { it.archivedAt == null }
+                    val allArchived = selectedNotes.isNotEmpty() && pinTargets.isEmpty()
                     SelectionTopBar(
                         count = selectedIds.size,
-                        allPinned = notes.any { it.id in selectedIds } &&
-                            notes.filter { it.id in selectedIds }.all { it.pinnedAt != null },
+                        canPin = pinTargets.isNotEmpty(),
+                        allPinned = pinTargets.isNotEmpty() && pinTargets.all { it.pinnedAt != null },
+                        allArchived = allArchived,
                         containerColor = bgColor,
                         onClose = { selectedIds = emptySet() },
                         onTogglePin = {
-                            val ids = selectedIds.toList()
+                            val ids = pinTargets.map { it.id }
                             // all pinned -> unpin them all, otherwise pin them all
-                            val pin = !notes.filter { it.id in selectedIds }.all { it.pinnedAt != null }
+                            val pin = !pinTargets.all { it.pinnedAt != null }
                             ApplicationScope.scope.launch { repository.setPinnedMany(ids, pin) }
                             selectedIds = emptySet()
                         },
                         onArchive = {
-                            val ids = selectedIds.toList()
                             selectedIds = emptySet()
-                            archiveNotes(ids)
+                            if (allArchived) {
+                                val ids = selectedNotes.map { it.id }
+                                ApplicationScope.scope.launch { repository.unarchiveMany(ids) }
+                            } else {
+                                archiveNotes(pinTargets.map { it.id })
+                            }
                         },
                         onDelete = { confirmDeleteSelected = true },
                         onSelectAll = { selectedIds = shownNotes.mapTo(HashSet()) { it.id } }
@@ -474,27 +488,47 @@ fun ElnorApp(
                                 },
                                 selected = note.id in selectedIds,
                                 // No three-dot menu while selecting: the bar at the top has the actions
-                                menuActions = if (selectionMode) emptyList() else listOf(
-                                    // Pinned notes are listed first. The list follows the repository,
-                                    // so it reorders by itself.
-                                    NoteMenuAction(
-                                        label = if (note.pinnedAt != null) "Unpin" else "Pin",
-                                        onClick = {
-                                            ApplicationScope.scope.launch {
-                                                repository.setPinned(note.id, note.pinnedAt == null)
-                                            }
-                                        }
-                                    ),
-                                    NoteMenuAction(
-                                        label = "Archive",
-                                        onClick = { archiveNotes(listOf(note.id)) }
-                                    ),
-                                    NoteMenuAction(
+                                menuActions = if (selectionMode) {
+                                    emptyList()
+                                } else {
+                                    val deleteAction = NoteMenuAction(
                                         label = "Delete",
                                         isDestructive = true,
                                         onClick = { pendingDeleteId = note.id }
                                     )
-                                )
+                                    if (note.archivedAt != null) {
+                                        // An archived note (a search result) goes back to the list
+                                        listOf(
+                                            NoteMenuAction(
+                                                label = "Unarchive",
+                                                onClick = {
+                                                    ApplicationScope.scope.launch {
+                                                        repository.unarchiveMany(listOf(note.id))
+                                                    }
+                                                }
+                                            ),
+                                            deleteAction
+                                        )
+                                    } else {
+                                        listOf(
+                                            // Pinned notes are listed first. The list follows the
+                                            // repository, so it reorders by itself.
+                                            NoteMenuAction(
+                                                label = if (note.pinnedAt != null) "Unpin" else "Pin",
+                                                onClick = {
+                                                    ApplicationScope.scope.launch {
+                                                        repository.setPinned(note.id, note.pinnedAt == null)
+                                                    }
+                                                }
+                                            ),
+                                            NoteMenuAction(
+                                                label = "Archive",
+                                                onClick = { archiveNotes(listOf(note.id)) }
+                                            ),
+                                            deleteAction
+                                        )
+                                    }
+                                }
                             )
                         }
 
