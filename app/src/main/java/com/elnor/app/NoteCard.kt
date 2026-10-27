@@ -77,7 +77,7 @@ fun NoteCard(
         Box(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
                 Text(
-                    getDisplayTitle(note),
+                    getListTitle(note),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = if (dark) MaterialTheme.colorScheme.onSurface
@@ -87,7 +87,7 @@ fun NoteCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                val preview = getPreviewBody(note)
+                val preview = MarkdownFormat.plainText(getPreviewBody(note))
                 if (preview.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     Text(

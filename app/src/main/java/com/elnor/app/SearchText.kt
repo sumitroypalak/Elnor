@@ -18,8 +18,13 @@ object SearchText {
     fun normalize(text: String): String =
         Normalizer.normalize(text, Normalizer.Form.NFC).lowercase(Locale.ROOT)
 
-    /** The value stored in the searchText column: title + "\n" + body, normalized. */
-    fun build(title: String, body: String): String = normalize(title + "\n" + body)
+    /**
+     * The value stored in the searchText column: title + "\n" + body, normalized. The ** of bold
+     * words are left out, so a phrase is found when only a part of it is bold ("hello **world**"
+     * is found with "hello world").
+     */
+    fun build(title: String, body: String): String =
+        normalize(title + "\n" + MarkdownFormat.withoutBold(body))
 
     /**
      * Puts a backslash before % _ and \ so they are searched as normal characters.
