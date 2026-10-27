@@ -108,6 +108,19 @@ class MarkdownFormatTest {
     }
 
     @Test
+    fun bold_withoutSelection_leavesPunctuationOutside() {
+        assertEquals(edit("(**hello**), world", 3, 8), MarkdownFormat.toggleBold("(hello), world", 3, 3))
+        assertEquals(edit("**hello**, world", 2, 7), MarkdownFormat.toggleBold("hello, world", 1, 1))
+        // and takes them away again
+        assertEquals(edit("(hello), world", 1, 6), MarkdownFormat.toggleBold("(**hello**), world", 4, 4))
+    }
+
+    @Test
+    fun bold_withoutSelection_onlyPunctuationUnderTheCursor_changesNothing() {
+        assertEquals(edit("a - b", 2, 2), MarkdownFormat.toggleBold("a - b", 2, 2))
+    }
+
+    @Test
     fun bold_withoutSelection_notOnAWord_putsEmptyMarksWithTheCursorInside() {
         assertEquals(edit("****", 2, 2), MarkdownFormat.toggleBold("", 0, 0))
         assertEquals(edit("a **** b", 4, 4), MarkdownFormat.toggleBold("a  b", 2, 2))
@@ -122,7 +135,24 @@ class MarkdownFormatTest {
 
     @Test
     fun bold_overSeveralLines_everyLineGetsItsOwnMarks() {
-        assertEquals(edit("**one**\n**two**", 2, 13), MarkdownFormat.toggleBold("one\ntwo", 0, 7))
+        assertEquals(edit("**one**\n**two**", 0, 15), MarkdownFormat.toggleBold("one\ntwo", 0, 7))
+    }
+
+    @Test
+    fun bold_overSeveralLines_pressingAgainTakesTheMarksAway() {
+        val first = MarkdownFormat.toggleBold("one\ntwo\nthree", 0, 13)
+        val second = MarkdownFormat.toggleBold(first.text, first.selStart, first.selEnd)
+        assertEquals(edit("one\ntwo\nthree", 0, 13), second)
+        // and again: back to bold, never "****one****"
+        val third = MarkdownFormat.toggleBold(second.text, second.selStart, second.selEnd)
+        assertEquals(first, third)
+    }
+
+    @Test
+    fun bold_overAList_pressingAgainTakesTheMarksAway() {
+        val first = MarkdownFormat.toggleBold("- a\n- b", 0, 7)
+        val second = MarkdownFormat.toggleBold(first.text, first.selStart, first.selEnd)
+        assertEquals("- a\n- b", second.text)
     }
 
     @Test
@@ -143,25 +173,25 @@ class MarkdownFormatTest {
     @Test
     fun bold_overSeveralLines_aMixMakesEveryLineBold() {
         assertEquals(
-            edit("**one**\n**two**", 0, 13),
+            edit("**one**\n**two**", 0, 15),
             MarkdownFormat.toggleBold("**one**\ntwo", 0, 11)
         )
     }
 
     @Test
     fun bold_overSeveralLines_blankLinesStayBlank() {
-        assertEquals(edit("**a**\n\n**b**", 2, 10), MarkdownFormat.toggleBold("a\n\nb", 0, 4))
+        assertEquals(edit("**a**\n\n**b**", 0, 12), MarkdownFormat.toggleBold("a\n\nb", 0, 4))
     }
 
     @Test
     fun bold_overSeveralLines_aTrailingLineBreakIsLeftOut() {
-        assertEquals(edit("**a**\n**b**\n", 2, 9), MarkdownFormat.toggleBold("a\nb\n", 0, 4))
+        assertEquals(edit("**a**\n**b**\n", 0, 11), MarkdownFormat.toggleBold("a\nb\n", 0, 4))
     }
 
     @Test
     fun bold_overAList_keepsTheListMarksOutside() {
         assertEquals(
-            edit("- **a**\n- **b**", 4, 13),
+            edit("- **a**\n- **b**", 2, 15),
             MarkdownFormat.toggleBold("- a\n- b", 0, 7)
         )
         assertEquals(edit("1. **a**", 5, 6), MarkdownFormat.toggleBold("1. a", 0, 4))
@@ -295,7 +325,17 @@ class MarkdownFormatTest {
         assertNull(MarkdownFormat.afterNewline("- a", "- ab", 4))
         assertNull(MarkdownFormat.afterNewline("- a", "- a\nb\n", 6))
         assertNull(MarkdownFormat.afterNewline("- ab", "- a", 3))
-        assertNull(MarkdownFormat.afterNewline("- a", "- b\n", 4))
+        // a change in an earlier line is not the keyboard fixing the last word
+        assertNull(MarkdownFormat.afterNewline("x\n- a", "y\n- a\n", 6))
+    }
+
+    @Test
+    fun enter_stillWorksWhenTheKeyboardCorrectsTheLastWord() {
+        assertEquals(
+            edit("- hello\n- ", 10, 10),
+            MarkdownFormat.afterNewline("- helo", "- hello\n", 8)
+        )
+        assertEquals(edit("- b\n- ", 6, 6), MarkdownFormat.afterNewline("- a", "- b\n", 4))
     }
 
     // ---- Text without the marks ----
@@ -330,11 +370,35 @@ class MarkdownFormatTest {
     }
 
     @Test
-    fun sortIgnoresTheFormattingMarksOfATitle() {
+    fun withoutBold_andWithoutMarks() {
+        assertEquals("a b c", MarkdownFormat.withoutBold("a **b** c"))
+        assertEquals("** x **", MarkdownFormat.withoutBold("** x **"))
+        assertEquals(
+            "Title\na b\nc\n5 * 3",
+            MarkdownFormat.withoutMarks("# Title\n- **a** b\n1. c\n5 * 3")
+        )
+        assertEquals("", MarkdownFormat.withoutMarks(""))
+    }
+
+    @Test
+    fun listTitle_aTitleTheUserTypedIsShownAsTyped() {
+        assertEquals("# Zed", getListTitle(Note(1, "# Zed", "", 1)))
+        assertEquals("**Mango**", getListTitle(Note(2, "**Mango**", "", 1)))
+    }
+
+    @Test
+    fun listTitle_aNameFromTheFirstLineHasNoMarks() {
+        assertEquals("Plan", getListTitle(Note(1, "", "# Plan\nbody", 1)))
+        assertEquals("Mango", getListTitle(Note(2, "", "**Mango**\nx", 1)))
+        assertEquals("Untitled note", getListTitle(Note(3, "", "", 1)))
+    }
+
+    @Test
+    fun sortIgnoresTheMarksOfANameTakenFromTheFirstLine() {
         val notes = listOf(
-            Note(1, "# Zed", "", 1),
+            Note(1, "", "# Zed\nx", 1),
             Note(2, "Apple", "", 2),
-            Note(3, "**Mango**", "", 3)
+            Note(3, "", "**Mango**\nx", 3)
         )
         assertEquals(
             listOf(2L, 3L, 1L),

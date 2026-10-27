@@ -222,7 +222,7 @@ private fun TrashNoteCard(
             Modifier.padding(start = 20.dp, top = 20.dp, end = 12.dp, bottom = 8.dp)
         ) {
             Text(
-                MarkdownFormat.plainLine(getDisplayTitle(note)),
+                getListTitle(note),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,

@@ -55,12 +55,15 @@ fun EditorScreen(
 
     // Word and character count of the whole note. The first value is calculated at once, then it
     // is updated a moment after the typing stops, off the main thread, so a long note stays smooth.
-    var stats by remember { mutableStateOf(noteStats(title, bodyValue.text)) }
+    var stats by remember { mutableStateOf(noteStats(title, MarkdownFormat.withoutMarks(bodyValue.text))) }
     LaunchedEffect(title, bodyValue.text) {
         val currentTitle = title
         val currentBody = bodyValue.text
         delay(150)
-        stats = withContext(Dispatchers.Default) { noteStats(currentTitle, currentBody) }
+        // The marks of the formatting (** # - 1.) are not words and not characters of the text
+        stats = withContext(Dispatchers.Default) {
+            noteStats(currentTitle, MarkdownFormat.withoutMarks(currentBody))
+        }
     }
 
     // Links in the text (web, e-mail, phone). They are shown in the link colour. While the cursor is
@@ -315,25 +318,33 @@ fun EditorScreen(
                 )
             }
 
-            // Bold, heading and list buttons for the text (not for the title)
+            // Bold, heading and list buttons for the text (not for the title). The button for the
+            // link the cursor is in (Call / Email / Open) shares the row, so it takes no extra height.
             if (bodyFocused) {
-                FormatToolbar(
-                    onBold = { applyFormat(MarkdownFormat::toggleBold) },
-                    onHeading = { applyFormat(MarkdownFormat::cycleHeading) },
-                    onBullet = { applyFormat(MarkdownFormat::toggleBullet) },
-                    onNumbered = { applyFormat(MarkdownFormat::toggleNumbered) }
-                )
-            }
-
-            // Call / Email / Open, for the link the cursor is in
-            if (activeLink != null) {
-                LinkActionBar(
-                    link = activeLink,
-                    onClick = {
-                        AppLock.expectExternalScreen() // the dialer / browser is not "leaving" Elnor
-                        openLink(context, activeLink)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    FormatToolbar(
+                        onBold = { applyFormat(MarkdownFormat::toggleBold) },
+                        onHeading = { applyFormat(MarkdownFormat::cycleHeading) },
+                        onBullet = { applyFormat(MarkdownFormat::toggleBullet) },
+                        onNumbered = { applyFormat(MarkdownFormat::toggleNumbered) }
+                    )
+                    if (activeLink != null) {
+                        Spacer(Modifier.width(8.dp))
+                        LinkActionChip(
+                            link = activeLink,
+                            onClick = {
+                                AppLock.expectExternalScreen() // the dialer / browser is not "leaving" Elnor
+                                openLink(context, activeLink)
+                            },
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
                     }
-                )
+                }
             }
 
             // Word and character count, just above the keyboard

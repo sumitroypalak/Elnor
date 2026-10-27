@@ -74,11 +74,11 @@ class NoteTextTransformation(
 
 /**
  * The button that appears above the keyboard while the cursor is inside a link: Call, Email or
- * Open. It does not change the note.
+ * Open. It does not change the note. The editor puts it in the row of the formatting buttons.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LinkActionBar(link: LinkSpan, onClick: () -> Unit) {
+fun LinkActionChip(link: LinkSpan, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val label = when (link.type) {
         LinkType.PHONE -> "Call ${link.text}"
         LinkType.EMAIL -> "Email ${link.text}"
@@ -89,19 +89,14 @@ fun LinkActionBar(link: LinkSpan, onClick: () -> Unit) {
         LinkType.EMAIL -> Icons.Default.Email
         LinkType.WEB -> Icons.AutoMirrored.Filled.ArrowForward
     }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-    ) {
-        AssistChip(
-            onClick = onClick,
-            label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            leadingIcon = {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            }
-        )
-    }
+    AssistChip(
+        onClick = onClick,
+        modifier = modifier,
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        leadingIcon = {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        }
+    )
 }
 
 /**

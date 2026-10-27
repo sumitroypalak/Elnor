@@ -77,7 +77,7 @@ fun NoteCard(
         Box(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
                 Text(
-                    MarkdownFormat.plainLine(getDisplayTitle(note)),
+                    getListTitle(note),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = if (dark) MaterialTheme.colorScheme.onSurface

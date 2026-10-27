@@ -33,11 +33,8 @@ enum class NotesSort(val storageValue: String, val label: String) {
  */
 fun sortNotes(notes: List<Note>, sort: NotesSort): List<Note> {
     val titleOrder = Comparator<Note> { a, b ->
-        // Without the formatting marks: "# Apple" is sorted as "Apple"
-        String.CASE_INSENSITIVE_ORDER.compare(
-            MarkdownFormat.plainLine(getDisplayTitle(a)),
-            MarkdownFormat.plainLine(getDisplayTitle(b))
-        )
+        // The name as it is shown in the list: a first line "# Apple" is sorted as "Apple"
+        String.CASE_INSENSITIVE_ORDER.compare(getListTitle(a), getListTitle(b))
     }
     val within: Comparator<Note> = when (sort) {
         NotesSort.EDITED_NEWEST -> compareByDescending { it.updatedAt }

@@ -103,6 +103,12 @@ object MarkdownFormat {
             while (ws > 0 && !text[ws - 1].isWhitespace()) ws--
             while (we < text.length && !text[we].isWhitespace()) we++
             if (ws == we) return insertAtCursor(text, s, "****", 2)
+            // Punctuation around the word stays outside: "(hello)," becomes "(**hello**),". The **
+            // of a word that is already bold count as punctuation here; they are found again below.
+            while (ws < we && !isWordChar(text[ws])) ws++
+            while (we > ws && !isWordChar(text[we - 1])) we--
+            // Only marks or punctuation under the cursor (for example the "-" of a list item)
+            if (ws == we) return TextEdit(text, originalStart, originalEnd)
             s = ws
             e = we
         } else {
@@ -121,6 +127,8 @@ object MarkdownFormat {
         var position = 0
         var newStart = 0
         var newEnd = 0
+        var blockStart = 0
+        var blockEnd = 0
         for ((index, segment) in segments.withIndex()) {
             val (a, b) = segment
             val selected = text.substring(a, b)
@@ -141,14 +149,32 @@ object MarkdownFormat {
                 else -> BoldChange(a, b, "**$selected**", 2, 2 + selected.length)
             }
             out.append(text, position, change.replaceStart)
-            if (index == 0) newStart = out.length + change.innerStart
+            if (index == 0) {
+                newStart = out.length + change.innerStart
+                blockStart = out.length
+            }
             out.append(change.replacement)
             newEnd = out.length - (change.replacement.length - change.innerEnd)
+            blockEnd = out.length
             position = change.replaceEnd
         }
         out.append(text, position, text.length)
-        return TextEdit(out.toString(), newStart, newEnd)
+        // One piece: select the text inside the ** (or the text that lost them). Several lines:
+        // select everything that changed, with the ** in between, so that pressing the button
+        // again sees every line as bold and takes the ** away (the inner part alone would not).
+        return if (segments.size == 1) {
+            TextEdit(out.toString(), newStart, newEnd)
+        } else {
+            TextEdit(out.toString(), blockStart, blockEnd)
+        }
     }
+
+    /** A letter, a digit, or a mark that belongs to a letter (Bengali vowel signs and the like). */
+    private fun isWordChar(c: Char): Boolean =
+        c.isLetterOrDigit() || c == '_' || c.isSurrogate() ||
+            c.category == CharCategory.NON_SPACING_MARK ||
+            c.category == CharCategory.COMBINING_SPACING_MARK ||
+            c.category == CharCategory.ENCLOSING_MARK
 
     /** The part [replaceStart, replaceEnd) of the text becomes [replacement]; the inner part is what stays selected. */
     private class BoldChange(
@@ -255,18 +281,23 @@ object MarkdownFormat {
 
     /**
      * Called when the text changed from [oldText] to [newText] with the cursor at [cursor]. If the
-     * user pressed Enter at a line of a list, returns the text to show instead:
+     * user pressed Enter at a line of a list, returns the text to show instead. Only the line of the
+     * item may have changed besides the line break (the keyboard can correct the last word when
+     * Enter is pressed); a paste of several lines or any other change is left alone:
      *  - the next line starts with the next mark ("- " or the next number), or
      *  - when the line had a mark and nothing else, Enter ends the list: the mark is removed.
      * Returns null for every other change (typing, deleting, pasting, Enter outside a list).
      */
     fun afterNewline(oldText: String, newText: String, cursor: Int): TextEdit? {
         if (cursor < 1 || cursor > newText.length) return null
-        if (newText.length != oldText.length + 1 || newText[cursor - 1] != '\n') return null
-        // It must be exactly one inserted line break, nothing else changed
-        if (newText.removeRange(cursor - 1, cursor) != oldText) return null
-
+        if (newText[cursor - 1] != '\n' || newText.length <= oldText.length) return null
+        // Everything after the cursor is as it was ...
+        val after = newText.length - cursor
+        if (after > oldText.length || !oldText.endsWith(newText.substring(cursor))) return null
+        // ... and so is everything before the line of the item
         val lineStart = newText.lastIndexOf('\n', cursor - 2) + 1
+        if (lineStart + after > oldText.length || !oldText.startsWith(newText.substring(0, lineStart))) return null
+
         val line = newText.substring(lineStart, cursor - 1)
 
         val bullet = BULLET.find(line)
@@ -310,6 +341,18 @@ object MarkdownFormat {
         }
         return BOLD.replace(result) { it.groupValues[1] }
     }
+
+    /** [text] without the ** around bold words. Used for the search index: "a **b**" is found as "a b". */
+    fun withoutBold(text: String): String = BOLD.replace(text) { it.groupValues[1] }
+
+    /**
+     * [text] with all the formatting marks taken away: no ** , no # before a heading, no mark
+     * before a list item (numbers included). It is what is counted by "12 words".
+     */
+    fun withoutMarks(text: String): String =
+        if (text.isEmpty()) text else text.split('\n').joinToString("\n") { line ->
+            withoutBold(line.substring(blockMarkLength(line)))
+        }
 
     /** [plainLine] for every line of [text]. */
     fun plainText(text: String): String =

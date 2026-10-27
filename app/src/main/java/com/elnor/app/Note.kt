@@ -40,6 +40,16 @@ fun getDisplayTitle(note: Note): String {
 }
 
 /**
+ * The name shown in the notes list, the Archive and the Trash. A title the user typed is shown
+ * exactly as typed. The name taken from the first line of the text is shown without the formatting
+ * marks (a first line "# Plan" is called "Plan").
+ */
+fun getListTitle(note: Note): String {
+    val title = getDisplayTitle(note)
+    return if (note.title.isBlank()) MarkdownFormat.plainLine(title) else title
+}
+
+/**
  * Preview text shown under the name. When the first line is already used
  * as the name, it is skipped here so it does not appear twice.
  */

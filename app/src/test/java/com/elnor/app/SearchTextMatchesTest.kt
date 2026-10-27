@@ -40,6 +40,14 @@ class SearchTextMatchesTest {
     }
 
     @Test
+    fun aPhraseIsFoundAcrossBoldMarks() {
+        assertTrue(SearchText.matches("", "say hello **world**", "hello world"))
+        assertTrue(SearchText.matches("", "**hello** world", "hello world"))
+        // text that is not bold stays as it is
+        assertTrue(SearchText.matches("", "** x **", "** x **"))
+    }
+
+    @Test
     fun specialCharactersAreSearchedAsNormalText() {
         assertTrue(SearchText.matches("100% sure", "", "100%"))
         assertTrue(SearchText.matches("a_b", "", "a_b"))
