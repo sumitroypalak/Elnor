@@ -45,6 +45,7 @@ private const val SEARCH_DEBOUNCE_MS = 200L
 fun ElnorApp(
     dark: Boolean,
     repository: NoteRepository,
+    taskRepository: TaskRepository,
     editorViewModel: NoteEditorViewModel,
     onOpenSettings: () -> Unit,
     onOpenArchive: () -> Unit,
@@ -56,6 +57,8 @@ fun ElnorApp(
     var search by remember { mutableStateOf("") }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var homeTab by rememberSaveable { mutableStateOf(HomeTab.NOTE) }
+    // The "new task" dialog of the Task tab (opened by the round "+" button of the bottom bar)
+    var newTaskOpen by rememberSaveable { mutableStateOf(false) }
     var editingNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
     // An archived note can be opened too (it is a search result), so the editor looks in both
     // lists. null until the Archive is read, so such a note is not mistaken for a new one.
@@ -260,21 +263,27 @@ fun ElnorApp(
                         dark = dark,
                         onSelect = { homeTab = it },
                         onNewNote = {
-                            homeTab = HomeTab.NOTE
-                            editingNoteId = null
-                            editorOpen = true
+                            if (homeTab == HomeTab.TASK) {
+                                // On the Task tab the "+" button adds a task, not a note
+                                newTaskOpen = true
+                            } else {
+                                homeTab = HomeTab.NOTE
+                                editingNoteId = null
+                                editorOpen = true
+                            }
                         }
                     )
                 },
                 floatingActionButtonPosition = FabPosition.Center
             ) { padding ->
-                // Task and Collection are placeholders for now. Only Notes has content.
+                // Collection is a placeholder for now. Notes and Tasks have content.
                 if (homeTab != HomeTab.NOTE) {
                     if (homeTab == HomeTab.TASK) {
-                        HomeTabPlaceholder(
-                            title = "Tasks are coming soon",
-                            subtitle = "Your to-dos will live here.",
-                            padding = padding
+                        TasksScreen(
+                            repository = taskRepository,
+                            padding = padding,
+                            addDialogOpen = newTaskOpen,
+                            onAddDialogDismiss = { newTaskOpen = false }
                         )
                     } else {
                         HomeTabPlaceholder(

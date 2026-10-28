@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.room.Database
+import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -15,10 +16,52 @@ import org.json.JSONArray
  * Version 3: adds the deletedAt column (the Trash, see NoteEntity).
  * Version 4: adds the pinnedAt column (pinned notes, see NoteEntity).
  * Version 5: adds the archivedAt column (the Archive, see NoteEntity).
+ * Version 6: adds the "tasks" table (the Task tab, see TaskEntity).
  */
-@Database(entities = [NoteEntity::class], version = 5, exportSchema = false)
+@Database(entities = [NoteEntity::class, TaskEntity::class], version = 6, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
+    abstract fun taskDao(): TaskDao
+}
+
+/**
+ * The one database of the app. Notes and tasks live in the same file, so both repositories must
+ * share one instance (two Room instances on one file would not see each other's changes).
+ */
+object ElnorDatabase {
+    @Volatile
+    private var instance: AppDatabase? = null
+
+    fun get(context: Context): AppDatabase {
+        return instance ?: synchronized(this) {
+            instance ?: build(context.applicationContext).also { instance = it }
+        }
+    }
+
+    private fun build(appContext: Context): AppDatabase =
+        Room.databaseBuilder(appContext, AppDatabase::class.java, "elnor_notes_room.db")
+            .addMigrations(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6
+            )
+            .addCallback(LegacyNotesImport(appContext))
+            .build()
+}
+
+/**
+ * Adds the empty "tasks" table. The notes table is not touched. The column definitions must
+ * match TaskEntity exactly, or Room refuses to open the database.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS tasks (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "title TEXT NOT NULL, " +
+                "createdAt INTEGER NOT NULL, " +
+                "dueDate INTEGER, " +
+                "completedAt INTEGER)"
+        )
+    }
 }
 
 /**

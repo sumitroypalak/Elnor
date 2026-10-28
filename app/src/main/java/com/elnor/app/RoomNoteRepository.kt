@@ -1,7 +1,6 @@
 package com.elnor.app
 
 import android.content.Context
-import androidx.room.Room
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -158,10 +157,8 @@ class RoomNoteRepository(
         }
 
         private fun create(appContext: Context): RoomNoteRepository {
-            val database = Room.databaseBuilder(appContext, AppDatabase::class.java, "elnor_notes_room.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
-                .addCallback(LegacyNotesImport(appContext))
-                .build()
+            // The database is shared with the tasks (see ElnorDatabase)
+            val database = ElnorDatabase.get(appContext)
             return RoomNoteRepository(database.noteDao(), ApplicationScope.scope)
         }
     }
