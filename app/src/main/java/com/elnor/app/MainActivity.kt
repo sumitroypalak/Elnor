@@ -86,11 +86,13 @@ class MainActivity : FragmentActivity() {
         )
 
         val repository = RoomNoteRepository.get(applicationContext)
+        val taskRepository = RoomTaskRepository.get(applicationContext)
         // Notes that have been in the Trash for 30 days are deleted for good when the app starts
         repository.purgeExpiredTrashInBackground()
         setContent {
             ElnorRoot(
                 repository = repository,
+                taskRepository = taskRepository,
                 editorViewModel = editorViewModel,
                 initialThemeMode = initialThemeMode,
                 onUnlockClick = { showUnlockPrompt(automatic = false) }
@@ -155,6 +157,7 @@ private enum class AppScreen { HOME, SETTINGS, TRASH, ARCHIVE, APP_LOCK, BACKUP 
 @Composable
 fun ElnorRoot(
     repository: NoteRepository,
+    taskRepository: TaskRepository,
     editorViewModel: NoteEditorViewModel,
     initialThemeMode: ThemeMode,
     onUnlockClick: () -> Unit = {}
@@ -233,6 +236,7 @@ fun ElnorRoot(
                         ElnorApp(
                             dark = darkTheme,
                             repository = repository,
+                            taskRepository = taskRepository,
                             editorViewModel = editorViewModel,
                             onOpenSettings = { screen = AppScreen.SETTINGS },
                             onOpenArchive = { screen = AppScreen.ARCHIVE },
