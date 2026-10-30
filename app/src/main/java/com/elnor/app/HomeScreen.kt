@@ -283,7 +283,8 @@ fun ElnorApp(
                             repository = taskRepository,
                             padding = padding,
                             addDialogOpen = newTaskOpen,
-                            onAddDialogDismiss = { newTaskOpen = false }
+                            onAddDialogDismiss = { newTaskOpen = false },
+                            snackbarHostState = snackbarHostState
                         )
                     } else {
                         HomeTabPlaceholder(
