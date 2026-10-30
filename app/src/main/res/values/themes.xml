@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Elnor" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- For ShareReceiverActivity: it shows nothing, so it must not flash a window. -->
+    <style name="Theme.Elnor.Transparent" parent="android:Theme.Translucent.NoTitleBar" />
 </resources>
