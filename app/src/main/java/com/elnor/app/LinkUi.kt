@@ -30,7 +30,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
 
 // "Find in note" colours. The text colour is fixed dark so it can be read on the yellow in the
 // dark theme too.
@@ -78,11 +78,14 @@ class NoteTextTransformation(
         return TransformedText(styled, OffsetMapping.Identity)
     }
 
-    // Headings stay a little smaller than the 24.sp line height of the text, so lines never overlap
+    // Headings stay a little smaller than the line height of the text, so lines never overlap.
+    // The sizes are in "em" (times the size of the text around them), not in sp, so they grow and
+    // shrink with the font size of Settings. At the normal size 1.375 em is 22 sp and 1.1875 em is
+    // 19 sp (the text is 16 sp, its line 24 sp).
     private fun formatStyle(kind: MarkdownFormat.Kind): SpanStyle = when (kind) {
         MarkdownFormat.Kind.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
-        MarkdownFormat.Kind.HEADING1 -> SpanStyle(fontWeight = FontWeight.Bold, fontSize = 22.sp)
-        MarkdownFormat.Kind.HEADING2 -> SpanStyle(fontWeight = FontWeight.Bold, fontSize = 19.sp)
+        MarkdownFormat.Kind.HEADING1 -> SpanStyle(fontWeight = FontWeight.Bold, fontSize = 1.375.em)
+        MarkdownFormat.Kind.HEADING2 -> SpanStyle(fontWeight = FontWeight.Bold, fontSize = 1.1875.em)
         MarkdownFormat.Kind.MARKER -> SpanStyle(color = markerColor)
         MarkdownFormat.Kind.LIST_MARKER -> SpanStyle(color = linkColor, fontWeight = FontWeight.Bold)
     }
