@@ -14,11 +14,14 @@ import kotlinx.coroutines.flow.stateIn
 /**
  * Room (SQLite) storage. [scope] keeps [notes] up to date; tests pass their own scope.
  * [now] is the clock for the time a note was deleted. Replaced in tests.
+ * [retentionMs] is how long a note stays in the Trash (Settings > Trash). It is asked every time the
+ * Trash is cleaned, so a change in Settings counts at once.
  */
 class RoomNoteRepository(
     private val dao: NoteDao,
     scope: CoroutineScope,
-    private val now: () -> Long = { System.currentTimeMillis() }
+    private val now: () -> Long = { System.currentTimeMillis() },
+    private val retentionMs: () -> Long = { TRASH_RETENTION_MS }
 ) : NoteRepository {
 
     private val _notesLoaded = MutableStateFlow(false)
@@ -125,10 +128,11 @@ class RoomNoteRepository(
         dao.deleteAllTrashed()
     }
 
-    // A note is expired when now - deletedAt >= 30 days, that is deletedAt <= now - 30 days.
-    // If the phone's clock goes backwards, the cutoff moves back too, so nothing is removed early.
+    // A note is expired when now - deletedAt >= the chosen time (7, 30 or 90 days), that is
+    // deletedAt <= now - that time. If the phone's clock goes backwards, the cutoff moves back too,
+    // so nothing is removed early.
     override suspend fun purgeExpiredTrash(): Int =
-        dao.deleteTrashedUpTo(now() - TRASH_RETENTION_MS)
+        dao.deleteTrashedUpTo(now() - retentionMs())
 
     override suspend fun exportAll(): List<Note> =
         dao.getEverything().map { it.toNote() }
@@ -159,7 +163,12 @@ class RoomNoteRepository(
         private fun create(appContext: Context): RoomNoteRepository {
             // The database is shared with the tasks (see ElnorDatabase)
             val database = ElnorDatabase.get(appContext)
-            return RoomNoteRepository(database.noteDao(), ApplicationScope.scope)
+            return RoomNoteRepository(
+                database.noteDao(),
+                ApplicationScope.scope,
+                // The saved choice of Settings > Trash, read at the moment the Trash is cleaned
+                retentionMs = { loadTrashRetention(appContext).millis }
+            )
         }
     }
 }

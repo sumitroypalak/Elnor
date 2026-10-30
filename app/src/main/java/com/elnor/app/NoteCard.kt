@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -198,6 +199,9 @@ internal fun DeleteNotesDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    // The time chosen in Settings > Trash (30 days if never changed)
+    val context = LocalContext.current
+    val trashDays = remember { loadTrashRetention(context).days }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -208,7 +212,7 @@ internal fun DeleteNotesDialog(
                 (if (count == 1) "This note" else "These notes") +
                     " will be moved to Trash. You can restore " +
                     (if (count == 1) "it" else "them") +
-                    " within $TRASH_RETENTION_DAYS days. After that " +
+                    " within $trashDays days. After that " +
                     (if (count == 1) "it is" else "they are") + " deleted for good."
             )
         },
@@ -234,13 +238,16 @@ internal fun DeleteNoteDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    // The time chosen in Settings > Trash (30 days if never changed)
+    val context = LocalContext.current
+    val trashDays = remember { loadTrashRetention(context).days }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Delete note?", fontWeight = FontWeight.Bold) },
         text = {
             Text(
                 "This note will be moved to Trash. You can restore it within " +
-                    "$TRASH_RETENTION_DAYS days. After that it is deleted for good."
+                    "$trashDays days. After that it is deleted for good."
             )
         },
         confirmButton = {

@@ -119,23 +119,28 @@ interface NoteRepository {
      * Adds the notes of a backup. It only adds: notes that are already stored (same title, text
      * and updatedAt) are skipped, and nothing that exists is changed or removed. The ids in
      * [notes] are ignored, every added note gets a new id. pinnedAt and deletedAt are kept, so a
-     * note that was in the Trash stays there until its 30 days are over.
+     * note that was in the Trash stays there until its time in the Trash is over.
      */
     suspend fun importNotes(notes: List<Note>): ImportSummary
 
     /**
-     * Removes for good every note that has been in the Trash for [TRASH_RETENTION_DAYS] days or
-     * longer, counted from the time it was moved there (its deletedAt). Notes that are not in
-     * the Trash are never touched. Returns how many notes were removed.
+     * Removes for good every note that has been in the Trash for the chosen time (Settings > Trash:
+     * 7, 30 or 90 days, see [TrashRetention]) or longer, counted from the time it was moved there
+     * (its deletedAt). Notes that are not in the Trash are never touched. Returns how many notes
+     * were removed.
      */
     suspend fun purgeExpiredTrash(): Int
 }
 
-/** How long a note stays in the Trash. After this many days it is deleted for good. */
+/**
+ * How long a note stays in the Trash when nothing else is chosen: the default of
+ * [TrashRetention]. The user can change it in Settings > Trash, so screens that show the number of
+ * days read the saved choice ([loadTrashRetention]), not this constant.
+ */
 const val TRASH_RETENTION_DAYS = 30
 
 /**
- * [TRASH_RETENTION_DAYS] in milliseconds (30 x 24 hours). deletedAt is a point in time
+ * [TRASH_RETENTION_DAYS] in milliseconds (30 x 24 hours), the default. deletedAt is a point in time
  * (milliseconds since 1970), so the count keeps going while the app is closed.
  */
 const val TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24L * 60L * 60L * 1000L
