@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    trashRetention: TrashRetention,
+    onTrashRetentionChange: (TrashRetention) -> Unit,
     appLockEnabled: Boolean,
     onOpenAppLock: () -> Unit,
     onOpenBackup: () -> Unit,
@@ -40,6 +42,13 @@ fun SettingsScreen(
     val bgColor = MaterialTheme.colorScheme.background
     // rememberSaveable: the dialog stays open if the screen is recreated (rotation, phone theme change)
     var showThemeDialog by rememberSaveable { mutableStateOf(false) }
+    var showTrashDialog by rememberSaveable { mutableStateOf(false) }
+    // A shorter time deletes notes at once, so it is only applied after the user confirms. Saved as
+    // the stored text (null = no question open), because an enum cannot be saved as it is.
+    var pendingShorterStorage by rememberSaveable { mutableStateOf<String?>(null) }
+    val pendingShorter = pendingShorterStorage?.let { stored ->
+        TrashRetention.entries.firstOrNull { it.storageValue == stored }
+    }
 
     Scaffold(
         containerColor = bgColor,
@@ -105,6 +114,77 @@ fun SettingsScreen(
                         if (mode != themeMode) onThemeModeChange(mode) // applies and saves, see ElnorRoot
                     },
                     onDismiss = { showThemeDialog = false }
+                )
+            }
+
+            // ---- Trash ----
+            SectionLabel("Trash")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(role = Role.Button) { showTrashDialog = true }
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        "Keep deleted notes for",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        trashRetention.label(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    )
+                }
+            }
+
+            if (showTrashDialog) {
+                TrashRetentionDialog(
+                    current = trashRetention,
+                    onSelect = { choice ->
+                        showTrashDialog = false
+                        when {
+                            choice == trashRetention -> Unit
+                            // Shorter: notes that are already older than that go for good, so ask first
+                            choice.isShorterThan(trashRetention) -> pendingShorterStorage = choice.storageValue
+                            else -> onTrashRetentionChange(choice)
+                        }
+                    },
+                    onDismiss = { showTrashDialog = false }
+                )
+            }
+
+            if (pendingShorter != null) {
+                AlertDialog(
+                    onDismissRequest = { pendingShorterStorage = null },
+                    title = { Text("Keep deleted notes for ${pendingShorter.label()}?", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(
+                            "Notes that have been in the Trash for more than ${pendingShorter.days} days " +
+                                "will be deleted for good now. This cannot be undone."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            pendingShorterStorage = null
+                            onTrashRetentionChange(pendingShorter) // saves, then cleans the Trash, see ElnorRoot
+                        }) {
+                            Text("Change", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingShorterStorage = null }) { Text("Cancel") }
+                    }
                 )
             }
 
@@ -288,6 +368,52 @@ private fun ThemeDialog(
                         Spacer(Modifier.width(16.dp))
                         Text(
                             mode.label(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+/**
+ * "Keep deleted notes for": 7, 30 or 90 days as radio buttons, the current one is checked.
+ * Tapping a row selects it at once (the caller applies it, or asks first when it is shorter, and
+ * closes the dialog). Tapping outside, Back or Cancel closes it without a change.
+ */
+@Composable
+private fun TrashRetentionDialog(
+    current: TrashRetention,
+    onSelect: (TrashRetention) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Keep deleted notes for", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.selectableGroup()) {
+                for (choice in TrashRetention.entries) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = choice == current,
+                                onClick = { onSelect(choice) },
+                                role = Role.RadioButton
+                            )
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = choice == current, onClick = null)
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            choice.label(),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurface
                         )

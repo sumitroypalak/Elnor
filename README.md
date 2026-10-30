@@ -24,7 +24,7 @@ Features
 - Show notes as a list or as a two-column grid (button next to "Your notes", remembered)
 - Delete notes (they go to the Trash first)
 - Trash: restore a note, delete it for good, or empty the Trash
-- Notes in the Trash are deleted automatically 30 days after they were moved there
+- Notes in the Trash are deleted automatically after 7, 30 (the default) or 90 days, counted from the day they were moved there. Choose it in Settings > Trash > "Keep deleted notes for". Choosing a shorter time asks first, because notes that have been in the Trash longer than that are deleted for good at once. A longer time only keeps notes longer
 - Backup & restore (Settings > Backup & restore): save all notes (also the ones in the Trash and the Archive) into one `.json` file in a place you choose, and add the notes of such a file back. Restoring only adds notes: nothing that exists is changed, and importing the same file twice makes no copies. The file is not encrypted.
 - App lock: unlock with fingerprint, face or the phone's own screen-lock PIN (Settings > App lock). It locks immediately, after 1 minute or after 30 minutes. Elnor has no PIN of its own. While the App lock is on, screenshots and screen recording are blocked and the Recent Apps preview of Elnor is blank, so notes cannot be seen there. The notes database is also kept out of Google cloud backup and adb backup: use Backup & restore to move notes to another phone.
 

@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,8 +50,11 @@ internal fun TrashScreen(
     var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     var confirmEmpty by rememberSaveable { mutableStateOf(false) }
     val notes = trashed
+    // The time chosen in Settings > Trash (30 days if never changed)
+    val context = LocalContext.current
+    val trashDays = remember { loadTrashRetention(context).days }
 
-    // Opening the Trash also removes the notes that have been here for 30 days. The list
+    // Opening the Trash also removes the notes that have been here for the chosen time. The list
     // updates by itself when they are gone.
     LaunchedEffect(Unit) {
         repository.purgeExpiredTrashInBackground()
@@ -126,7 +130,7 @@ internal fun TrashScreen(
             ) {
                 item {
                     Text(
-                        "Notes are deleted for good $TRASH_RETENTION_DAYS days after they were " +
+                        "Notes are deleted for good $trashDays days after they were " +
                             "moved here. Tap a note to read all of it.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)

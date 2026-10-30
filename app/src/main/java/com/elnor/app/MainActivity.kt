@@ -87,7 +87,8 @@ class MainActivity : FragmentActivity() {
 
         val repository = RoomNoteRepository.get(applicationContext)
         val taskRepository = RoomTaskRepository.get(applicationContext)
-        // Notes that have been in the Trash for 30 days are deleted for good when the app starts
+        // Notes that have been in the Trash for the chosen time (default 30 days, Settings > Trash)
+        // are deleted for good when the app starts
         repository.purgeExpiredTrashInBackground()
         setContent {
             ElnorRoot(
@@ -166,6 +167,8 @@ fun ElnorRoot(
     // Changes by itself when the phone switches between light and dark
     val systemDark = isSystemInDarkTheme()
     var themeMode by remember { mutableStateOf(initialThemeMode) }
+    // How long deleted notes stay in the Trash (Settings > Trash)
+    var trashRetention by remember { mutableStateOf(loadTrashRetention(context)) }
     val darkTheme = themeMode.isDark(systemDark)
     var screen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
     val locked by AppLock.locked.collectAsState()
@@ -194,6 +197,13 @@ fun ElnorRoot(
                             onThemeModeChange = {
                                 themeMode = it
                                 saveThemeMode(context, it)
+                            },
+                            trashRetention = trashRetention,
+                            onTrashRetentionChange = {
+                                trashRetention = it
+                                saveTrashRetention(context, it)
+                                // Notes older than the new time go for good now, not at the next start
+                                repository.purgeExpiredTrashInBackground()
                             },
                             appLockEnabled = appLockEnabled,
                             onOpenAppLock = { screen = AppScreen.APP_LOCK },
