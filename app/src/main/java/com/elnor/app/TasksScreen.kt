@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -31,14 +32,21 @@ private const val MILLIS_PER_DAY = 86_400_000L
  * [addDialogOpen] is controlled by the home screen, because the round "+" button of the bottom bar
  * lives there. Changes are sent through [ApplicationScope], like saves in the editor, so leaving
  * the tab cannot cancel them.
+ *
+ * [snackbarHostState] belongs to the home screen's Scaffold, which shows the message with "Undo"
+ * that follows checking a task off.
  */
 @Composable
 fun TasksScreen(
     repository: TaskRepository,
     padding: PaddingValues,
     addDialogOpen: Boolean,
-    onAddDialogDismiss: () -> Unit
+    onAddDialogDismiss: () -> Unit,
+    snackbarHostState: SnackbarHostState
 ) {
+    val view = LocalView.current
+    val uiScope = rememberCoroutineScope()
+
     // null until the database has answered, so "No tasks yet" never flashes
     val loaded by repository.tasks.collectAsState<List<Task>, List<Task>?>(initial = null)
     val tasks = loaded
@@ -104,6 +112,25 @@ fun TasksScreen(
                         today = today,
                         onToggle = { done ->
                             ApplicationScope.scope.launch { repository.setCompleted(task.id, done) }
+                            if (done) {
+                                // A light tick, and a message that takes the check back (a task
+                                // checked by mistake). Unchecking a task needs neither.
+                                performTaskDoneHaptic(view)
+                                uiScope.launch {
+                                    snackbarHostState.currentSnackbarData?.dismiss()
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = taskCompletedMessage(truncateTitle(task.title, 30)),
+                                        actionLabel = "Undo",
+                                        withDismissAction = true,
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) {
+                                        ApplicationScope.scope.launch {
+                                            repository.setCompleted(task.id, false)
+                                        }
+                                    }
+                                }
+                            }
                         },
                         onClick = { editingId = task.id }
                     )
