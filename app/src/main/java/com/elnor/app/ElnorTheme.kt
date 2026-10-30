@@ -75,9 +75,19 @@ internal fun applyWindowTheme(window: Window, view: View, dark: Boolean) {
     controller.isAppearanceLightNavigationBars = !dark
 }
 
+/**
+ * [fontScale] is the factor of the chosen font size ([FontSizeChoice.scale], Settings > Appearance
+ * > Font size). 1 is the normal size.
+ */
 @Composable
-fun ElnorTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
+fun ElnorTheme(
+    darkTheme: Boolean,
+    fontScale: Float = 1f,
+    content: @Composable () -> Unit
+) {
     val colors = elnorColorScheme(darkTheme)
+    // Built again only when the font size changes
+    val typography = remember(fontScale) { elnorTypography(fontScale) }
 
     // Large, rounded shapes in the Material 3 Expressive style
     val shapes = Shapes(
@@ -100,7 +110,7 @@ fun ElnorTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = colors,
         shapes = shapes,
-        typography = ElnorTypography,
+        typography = typography,
         content = content
     )
 }

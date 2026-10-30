@@ -167,6 +167,8 @@ fun ElnorRoot(
     val systemDark = isSystemInDarkTheme()
     var themeMode by remember { mutableStateOf(initialThemeMode) }
     val darkTheme = themeMode.isDark(systemDark)
+    // The size of all text (Settings > Appearance > Font size)
+    var fontSize by remember { mutableStateOf(loadFontSizeChoice(context)) }
     var screen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
     val locked by AppLock.locked.collectAsState()
     val appLockEnabled by AppLock.enabled.collectAsState()
@@ -177,7 +179,7 @@ fun ElnorRoot(
         if (locked) focusManager.clearFocus(force = true)
     }
 
-    ElnorTheme(darkTheme = darkTheme) {
+    ElnorTheme(darkTheme = darkTheme, fontScale = fontSize.scale) {
         Box(Modifier.fillMaxSize()) {
             // The screens stay composed while locked (an open note is still there after unlocking),
             // but they are hidden from touch and from screen readers by the lock screen above.
@@ -198,7 +200,12 @@ fun ElnorRoot(
                             appLockEnabled = appLockEnabled,
                             onOpenAppLock = { screen = AppScreen.APP_LOCK },
                             onOpenBackup = { screen = AppScreen.BACKUP },
-                            onBack = { screen = AppScreen.HOME }
+                            onBack = { screen = AppScreen.HOME },
+                            fontSize = fontSize,
+                            onFontSizeChange = {
+                                fontSize = it
+                                saveFontSizeChoice(context, it)
+                            }
                         )
                     }
 

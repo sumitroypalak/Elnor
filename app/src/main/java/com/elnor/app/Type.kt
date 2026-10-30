@@ -37,31 +37,43 @@ private val ElnorLineHeightStyle = LineHeightStyle(
  *    for some styles, which is too tight for Bengali)
  *  - letterSpacing is 0, so nothing pushes Bengali vowel signs and conjuncts apart
  *  - one font family and one LineHeightStyle everywhere
+ *  - the size is multiplied by [scale] (Settings > Appearance > Font size) before the line
+ *    height is calculated, so the space between lines grows with the text
  */
-private fun TextStyle.forAllScripts(lineHeightRatio: Float): TextStyle = copy(
-    fontFamily = ElnorFontFamily,
-    lineHeight = fontSize * lineHeightRatio,
-    letterSpacing = 0.sp,
-    lineHeightStyle = ElnorLineHeightStyle
-)
+private fun TextStyle.forAllScripts(lineHeightRatio: Float, scale: Float): TextStyle {
+    val size = fontSize * scale
+    return copy(
+        fontFamily = ElnorFontFamily,
+        fontSize = size,
+        lineHeight = size * lineHeightRatio,
+        letterSpacing = 0.sp,
+        lineHeightStyle = ElnorLineHeightStyle
+    )
+}
 
 private val material3Defaults = Typography()
 
-/** Use this as MaterialTheme(typography = ...). Every Text and TextField reads its style from it. */
-val ElnorTypography = Typography(
-    displayLarge = material3Defaults.displayLarge.forAllScripts(1.4f),
-    displayMedium = material3Defaults.displayMedium.forAllScripts(1.4f),
-    displaySmall = material3Defaults.displaySmall.forAllScripts(1.4f),
-    headlineLarge = material3Defaults.headlineLarge.forAllScripts(1.4f),
-    headlineMedium = material3Defaults.headlineMedium.forAllScripts(1.4f),
-    headlineSmall = material3Defaults.headlineSmall.forAllScripts(1.4f),
-    titleLarge = material3Defaults.titleLarge.forAllScripts(1.5f),
-    titleMedium = material3Defaults.titleMedium.forAllScripts(1.5f),
-    titleSmall = material3Defaults.titleSmall.forAllScripts(1.5f),
-    bodyLarge = material3Defaults.bodyLarge.forAllScripts(1.5f),
-    bodyMedium = material3Defaults.bodyMedium.forAllScripts(1.5f),
-    bodySmall = material3Defaults.bodySmall.forAllScripts(1.5f),
-    labelLarge = material3Defaults.labelLarge.forAllScripts(1.5f),
-    labelMedium = material3Defaults.labelMedium.forAllScripts(1.5f),
-    labelSmall = material3Defaults.labelSmall.forAllScripts(1.5f)
+/**
+ * Use this as MaterialTheme(typography = ...). Every Text and TextField reads its style from it.
+ * [scale] is the factor of the chosen font size ([FontSizeChoice.scale]); 1 is the normal size.
+ */
+fun elnorTypography(scale: Float = 1f): Typography = Typography(
+    displayLarge = material3Defaults.displayLarge.forAllScripts(1.4f, scale),
+    displayMedium = material3Defaults.displayMedium.forAllScripts(1.4f, scale),
+    displaySmall = material3Defaults.displaySmall.forAllScripts(1.4f, scale),
+    headlineLarge = material3Defaults.headlineLarge.forAllScripts(1.4f, scale),
+    headlineMedium = material3Defaults.headlineMedium.forAllScripts(1.4f, scale),
+    headlineSmall = material3Defaults.headlineSmall.forAllScripts(1.4f, scale),
+    titleLarge = material3Defaults.titleLarge.forAllScripts(1.5f, scale),
+    titleMedium = material3Defaults.titleMedium.forAllScripts(1.5f, scale),
+    titleSmall = material3Defaults.titleSmall.forAllScripts(1.5f, scale),
+    bodyLarge = material3Defaults.bodyLarge.forAllScripts(1.5f, scale),
+    bodyMedium = material3Defaults.bodyMedium.forAllScripts(1.5f, scale),
+    bodySmall = material3Defaults.bodySmall.forAllScripts(1.5f, scale),
+    labelLarge = material3Defaults.labelLarge.forAllScripts(1.5f, scale),
+    labelMedium = material3Defaults.labelMedium.forAllScripts(1.5f, scale),
+    labelSmall = material3Defaults.labelSmall.forAllScripts(1.5f, scale)
 )
+
+/** The normal size (scale 1). */
+val ElnorTypography = elnorTypography(1f)

@@ -34,12 +34,15 @@ fun SettingsScreen(
     appLockEnabled: Boolean,
     onOpenAppLock: () -> Unit,
     onOpenBackup: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    fontSize: FontSizeChoice,
+    onFontSizeChange: (FontSizeChoice) -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
     val bgColor = MaterialTheme.colorScheme.background
     // rememberSaveable: the dialog stays open if the screen is recreated (rotation, phone theme change)
     var showThemeDialog by rememberSaveable { mutableStateOf(false) }
+    var showFontSizeDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         containerColor = bgColor,
@@ -95,6 +98,29 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
                     )
                 }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
+
+                // Second row of the same card: the size of all text
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(role = Role.Button) { showFontSizeDialog = true }
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        "Font size",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        fontSize.label(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    )
+                }
             }
 
             if (showThemeDialog) {
@@ -105,6 +131,17 @@ fun SettingsScreen(
                         if (mode != themeMode) onThemeModeChange(mode) // applies and saves, see ElnorRoot
                     },
                     onDismiss = { showThemeDialog = false }
+                )
+            }
+
+            if (showFontSizeDialog) {
+                FontSizeDialog(
+                    current = fontSize,
+                    onSelect = { choice ->
+                        showFontSizeDialog = false
+                        if (choice != fontSize) onFontSizeChange(choice) // applies and saves, see ElnorRoot
+                    },
+                    onDismiss = { showFontSizeDialog = false }
                 )
             }
 
@@ -289,6 +326,60 @@ private fun ThemeDialog(
                         Text(
                             mode.label(),
                             style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+/**
+ * "Font size": Small / Medium / Large as radio buttons, the current one is checked. Each name is
+ * shown in its own size, so the choice can be seen before it is made. Tapping a row selects it at
+ * once (the caller applies it and closes the dialog), like the theme dialog.
+ */
+@Composable
+private fun FontSizeDialog(
+    current: FontSizeChoice,
+    onSelect: (FontSizeChoice) -> Unit,
+    onDismiss: () -> Unit
+) {
+    // The dialog itself is drawn in the size that is chosen now, so a row's own size is its scale
+    // divided by the current scale, times the text size of the dialog
+    val base = MaterialTheme.typography.bodyLarge
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Font size", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.selectableGroup()) {
+                for (choice in FontSizeChoice.entries) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = choice == current,
+                                onClick = { onSelect(choice) },
+                                role = Role.RadioButton
+                            )
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // onClick = null: the whole row is the button (better for screen readers)
+                        RadioButton(selected = choice == current, onClick = null)
+                        Spacer(Modifier.width(16.dp))
+                        val factor = choice.scale / current.scale
+                        Text(
+                            "${choice.label()} · আমার নোট",
+                            style = base.copy(
+                                fontSize = base.fontSize * factor,
+                                lineHeight = base.lineHeight * factor
+                            ),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
