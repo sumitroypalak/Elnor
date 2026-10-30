@@ -10,6 +10,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.*
@@ -53,6 +54,16 @@ fun EditorScreen(
     val bodyFocus = remember { FocusRequester() }
     val context = LocalContext.current
 
+    // "Find in note": the bar above the title, the word, and which found place is the chosen one.
+    // It only looks at the text, it never changes the note.
+    var findOpen by rememberSaveable { mutableStateOf(false) }
+    var findQuery by rememberSaveable { mutableStateOf("") }
+    var findCurrent by rememberSaveable { mutableStateOf(0) }
+    val findFocus = remember { FocusRequester() }
+    LaunchedEffect(findOpen) {
+        if (findOpen) runCatching { findFocus.requestFocus() }
+    }
+
     // Word and character count of the whole note. The first value is calculated at once, then it
     // is updated a moment after the typing stops, off the main thread, so a long note stays smooth.
     var stats by remember { mutableStateOf(noteStats(title, MarkdownFormat.withoutMarks(bodyValue.text))) }
@@ -74,8 +85,14 @@ fun EditorScreen(
     // it styled and keeps the marks visible but dimmed.
     val formatSpans = remember(bodyValue.text) { MarkdownFormat.parse(bodyValue.text) }
     val markerColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
-    val textStyling = remember(links, formatSpans, linkColor, markerColor) {
-        NoteTextTransformation(links, formatSpans, linkColor, markerColor)
+    // The places of the searched word in the text (none while Find is closed)
+    val findMatches = remember(bodyValue.text, findOpen, findQuery) {
+        if (findOpen) FindInNote.find(bodyValue.text, findQuery) else emptyList()
+    }
+    // The chosen place. Kept inside the list, because the text can get shorter while typing.
+    val findIndex = if (findMatches.isEmpty()) -1 else findCurrent.coerceIn(0, findMatches.lastIndex)
+    val textStyling = remember(links, formatSpans, linkColor, markerColor, findMatches, findIndex) {
+        NoteTextTransformation(links, formatSpans, linkColor, markerColor, findMatches, findIndex)
     }
     var bodyFocused by remember { mutableStateOf(false) }
     val cursor = bodyValue.selection
@@ -96,6 +113,30 @@ fun EditorScreen(
         )
         bodyValue = TextFieldValue(result.text, TextRange(result.selStart, result.selEnd))
         viewModel.onBodyChange(result.text, result.selStart, result.selEnd)
+    }
+
+    // Puts the cursor at the start of a found place. The text field scrolls to its cursor when it
+    // has the focus, so the focus goes to the text (the Find field is tapped again to change the word).
+    fun jumpToMatch(index: Int) {
+        val match = findMatches.getOrNull(index) ?: return
+        findCurrent = index
+        val text = bodyValue.text
+        bodyValue = TextFieldValue(text, TextRange(match.start.coerceIn(0, text.length)))
+        runCatching { bodyFocus.requestFocus() }
+    }
+
+    // Next / Previous. The first press shows the chosen place (the first one after typing the word),
+    // the next presses move on.
+    fun findStep(forward: Boolean) {
+        if (findIndex < 0) return
+        val atChosen = bodyValue.selection.collapsed && bodyValue.selection.start == findMatches[findIndex].start
+        jumpToMatch(if (atChosen) FindInNote.step(findIndex, findMatches.size, forward) else findIndex)
+    }
+
+    fun closeFind() {
+        findOpen = false
+        findQuery = ""
+        findCurrent = 0
     }
 
     // The delete button is only shown when the note exists in storage
@@ -164,6 +205,8 @@ fun EditorScreen(
     }
 
     BackHandler { saveAndClose() }
+    // Registered after the one above, so it wins: Back closes the Find bar first
+    BackHandler(enabled = findOpen) { closeFind() }
 
     val fieldColors = TextFieldDefaults.colors(
         focusedContainerColor = Color.Transparent,
@@ -195,6 +238,12 @@ fun EditorScreen(
                     }
                     IconButton(onClick = { showSnapshot(viewModel.redo()) }, enabled = canRedo) {
                         Icon(RedoIcon, contentDescription = "Redo")
+                    }
+                    // Find in note: only when there is some text to look in
+                    if (bodyValue.text.isNotEmpty()) {
+                        IconButton(onClick = { findOpen = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Find in note")
+                        }
                     }
                     // Copy: the title and the text that are on the screen now (also if not saved yet)
                     val copyText = noteTextForCopy(title, bodyValue.text)
@@ -232,6 +281,23 @@ fun EditorScreen(
                 .imePadding() // keeps the text above the keyboard
                 .padding(horizontal = 8.dp)
         ) {
+            // Find in note (opened by the search button at the top)
+            if (findOpen) {
+                FindBar(
+                    query = findQuery,
+                    onQueryChange = {
+                        findQuery = it
+                        findCurrent = 0
+                    },
+                    counter = FindInNote.counterLabel(findQuery.isBlank(), findIndex, findMatches.size),
+                    hasMatches = findMatches.isNotEmpty(),
+                    onPrevious = { findStep(forward = false) },
+                    onNext = { findStep(forward = true) },
+                    onClose = { closeFind() },
+                    focusRequester = findFocus
+                )
+            }
+
             // Title (optional)
             TextField(
                 value = title,

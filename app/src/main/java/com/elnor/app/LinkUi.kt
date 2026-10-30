@@ -32,6 +32,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+// "Find in note" colours. The text colour is fixed dark so it can be read on the yellow in the
+// dark theme too.
+private val FOUND_STYLE = SpanStyle(background = Color(0xFFFFE082), color = Color(0xFF1B1B1B))
+private val FOUND_CURRENT_STYLE = SpanStyle(background = Color(0xFFFFA726), color = Color(0xFF1B1B1B))
+
 /**
  * Shows the text of a note styled while it is edited: the links in the link colour with an
  * underline, and the formatting ([MarkdownFormat]): bold words, bigger headings, and the marks
@@ -43,10 +48,16 @@ class NoteTextTransformation(
     private val links: List<LinkSpan>,
     private val format: List<MarkdownFormat.Span>,
     private val linkColor: Color,
-    private val markerColor: Color
+    private val markerColor: Color,
+    /** The places found by "Find in note": coloured with a background. Empty when Find is closed. */
+    private val found: List<FindInNote.Match> = emptyList(),
+    /** Which of [found] is the chosen one (a stronger colour), or -1. */
+    private val foundCurrent: Int = -1
 ) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
-        if (links.isEmpty() && format.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
+        if (links.isEmpty() && format.isEmpty() && found.isEmpty()) {
+            return TransformedText(text, OffsetMapping.Identity)
+        }
         val linkStyle = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
         val styled = buildAnnotatedString {
             append(text)
@@ -57,6 +68,11 @@ class NoteTextTransformation(
             }
             for (link in links) {
                 if (link.end <= text.length) addStyle(linkStyle, link.start, link.end)
+            }
+            // Last, so the found places stay visible over bold, links and the rest
+            for ((index, match) in found.withIndex()) {
+                if (match.start >= match.end || match.end > text.length) continue
+                addStyle(if (index == foundCurrent) FOUND_CURRENT_STYLE else FOUND_STYLE, match.start, match.end)
             }
         }
         return TransformedText(styled, OffsetMapping.Identity)
