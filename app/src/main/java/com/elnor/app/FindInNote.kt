@@ -22,8 +22,9 @@ object FindInNote {
      * is found twice, not three times). A blank [query] finds nothing. The offsets are offsets in
      * [text] exactly as it is, so they can be used to colour the text or to put the cursor.
      *
-     * A match always covers whole letters as the user sees them: finding "ক" in "কি" colours the
-     * whole "কি", because the vowel sign cannot be shown apart from its letter.
+     * A match covers whole letters as the platform's text rules see them: on a phone, finding "ক"
+     * in "কি" colours the whole "কি", because the vowel sign cannot be shown apart from its letter.
+     * (An old JDK, like the one in local unit tests, may see "ক" and "ি" as two letters.)
      */
     fun find(text: String, query: String): List<Match> {
         val wanted = SearchText.normalize(query)
