@@ -5,6 +5,7 @@ package com.elnor.app
 import android.app.Activity
 import android.content.Context
 import android.graphics.drawable.ColorDrawable
+import android.os.Build
 import android.view.View
 import android.view.Window
 import androidx.compose.foundation.background
@@ -15,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -64,12 +66,37 @@ fun elnorColorScheme(dark: Boolean): ColorScheme = if (dark) {
 }
 
 /**
+ * The colours the app really uses: the colours of the wallpaper when [dynamic] is on and this phone
+ * can do it ([supportsDynamicColor]), the Elnor colours in every other case. It never fails: a phone
+ * that cannot (or a [context] of null) gets the Elnor colours.
+ */
+fun elnorColorScheme(dark: Boolean, context: Context?, dynamic: Boolean): ColorScheme =
+    if (context != null && dynamicColorActive(dynamic, Build.VERSION.SDK_INT)) {
+        wallpaperColorScheme(context, dark)
+    } else {
+        elnorColorScheme(dark)
+    }
+
+/**
+ * Tells the screens that the wallpaper colours are in use. A few parts of Elnor have their own
+ * fixed colours (the pastel note cards, the dark bottom bar). With the wallpaper colours they take
+ * their colours from the theme instead, so they do not clash with it.
+ */
+val LocalDynamicColor = staticCompositionLocalOf { false }
+
+/**
  * Makes the window itself match the theme: the colour behind the app (seen behind the keyboard
  * and while the screen changes) and the icons of the status and navigation bars.
  * Used at launch (MainActivity) and every time the theme changes (ElnorTheme).
+ * [background] is the page colour of the theme in use; it is the Elnor one when nothing is given.
  */
-internal fun applyWindowTheme(window: Window, view: View, dark: Boolean) {
-    window.setBackgroundDrawable(ColorDrawable(elnorColorScheme(dark).background.toArgb()))
+internal fun applyWindowTheme(
+    window: Window,
+    view: View,
+    dark: Boolean,
+    background: Color = elnorColorScheme(dark).background
+) {
+    window.setBackgroundDrawable(ColorDrawable(background.toArgb()))
     val controller = WindowCompat.getInsetsController(window, view)
     controller.isAppearanceLightStatusBars = !dark
     controller.isAppearanceLightNavigationBars = !dark
@@ -78,14 +105,25 @@ internal fun applyWindowTheme(window: Window, view: View, dark: Boolean) {
 /**
  * [fontScale] is the factor of the chosen font size ([FontSizeChoice.scale], Settings > Appearance
  * > Font size). 1 is the normal size.
+ * [dynamicColor] asks for the colours of the wallpaper (Settings > Appearance > Dynamic colour). It
+ * only has an effect on Android 12 and newer.
  */
 @Composable
 fun ElnorTheme(
     darkTheme: Boolean,
     fontScale: Float = 1f,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colors = elnorColorScheme(darkTheme)
+    val context = LocalContext.current
+    // Never in the Android Studio preview, which has no wallpaper colours
+    val useDynamic = dynamicColor && !LocalView.current.isInEditMode &&
+        dynamicColorActive(true, Build.VERSION.SDK_INT)
+    // The wallpaper colours are read again when the phone's theme or wallpaper changes (the
+    // activity is recreated then), and when the switch or the light/dark mode changes
+    val colors = remember(darkTheme, useDynamic, context) {
+        elnorColorScheme(darkTheme, context, useDynamic)
+    }
     // Built again only when the font size changes
     val typography = remember(fontScale) { elnorTypography(fontScale) }
 
@@ -103,14 +141,16 @@ fun ElnorTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window
-            if (window != null) applyWindowTheme(window, view, darkTheme)
+            if (window != null) applyWindowTheme(window, view, darkTheme, colors.background)
         }
     }
 
-    MaterialTheme(
-        colorScheme = colors,
-        shapes = shapes,
-        typography = typography,
-        content = content
-    )
+    CompositionLocalProvider(LocalDynamicColor provides useDynamic) {
+        MaterialTheme(
+            colorScheme = colors,
+            shapes = shapes,
+            typography = typography,
+            content = content
+        )
+    }
 }

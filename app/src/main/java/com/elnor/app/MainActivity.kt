@@ -54,7 +54,11 @@ class MainActivity : FragmentActivity() {
         val systemDark =
             (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
                 Configuration.UI_MODE_NIGHT_YES
-        applyWindowTheme(window, window.decorView, initialThemeMode.isDark(systemDark))
+        val initialDark = initialThemeMode.isDark(systemDark)
+        // The page colour of the theme in use: the wallpaper colours when the user turned them on
+        // (Android 12+), otherwise the Elnor colours. The same one ElnorTheme will use.
+        val initialColors = elnorColorScheme(initialDark, this, loadDynamicColor(applicationContext))
+        applyWindowTheme(window, window.decorView, initialDark, initialColors.background)
 
         // Reads the app lock settings. A cold start with the lock on starts locked.
         AppLock.init(applicationContext)
@@ -172,6 +176,9 @@ fun ElnorRoot(
     val darkTheme = themeMode.isDark(systemDark)
     // The size of all text (Settings > Appearance > Font size)
     var fontSize by remember { mutableStateOf(loadFontSizeChoice(context)) }
+    // The colours of the wallpaper (Settings > Appearance > Dynamic colour). Only Android 12+ can.
+    val dynamicColorSupported = remember { isDynamicColorSupported() }
+    var dynamicColor by remember { mutableStateOf(loadDynamicColor(context)) }
     var screen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
     val locked by AppLock.locked.collectAsState()
     val appLockEnabled by AppLock.enabled.collectAsState()
@@ -182,7 +189,7 @@ fun ElnorRoot(
         if (locked) focusManager.clearFocus(force = true)
     }
 
-    ElnorTheme(darkTheme = darkTheme, fontScale = fontSize.scale) {
+    ElnorTheme(darkTheme = darkTheme, fontScale = fontSize.scale, dynamicColor = dynamicColor) {
         Box(Modifier.fillMaxSize()) {
             // The screens stay composed while locked (an open note is still there after unlocking),
             // but they are hidden from touch and from screen readers by the lock screen above.
@@ -215,6 +222,12 @@ fun ElnorRoot(
                             onFontSizeChange = {
                                 fontSize = it
                                 saveFontSizeChoice(context, it)
+                            },
+                            dynamicColorSupported = dynamicColorSupported,
+                            dynamicColor = dynamicColor,
+                            onDynamicColorChange = {
+                                dynamicColor = it
+                                saveDynamicColor(context, it)
                             }
                         )
                     }
