@@ -69,12 +69,25 @@ fun ElnorApp(
     var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val bgColor = MaterialTheme.colorScheme.background
-    val cardColors = listOf(
-        Color(0xFFE9E5FF),
-        Color(0xFFDDF4F0),
-        Color(0xFFFFEACD),
-        Color(0xFFF9DFEA)
-    )
+    // The four pastel colours of the cards in the light theme. With the wallpaper colours (dynamic
+    // colour) the cards take light colours of the theme instead, so they match the wallpaper. All of
+    // them are light (tone 90 to 92), so the dark text of the cards can be read on any wallpaper.
+    val scheme = MaterialTheme.colorScheme
+    val cardColors = if (LocalDynamicColor.current) {
+        listOf(
+            scheme.primaryContainer,
+            scheme.secondaryContainer,
+            scheme.tertiaryContainer,
+            scheme.surfaceContainerHigh
+        )
+    } else {
+        listOf(
+            Color(0xFFE9E5FF),
+            Color(0xFFDDF4F0),
+            Color(0xFFFFEACD),
+            Color(0xFFF9DFEA)
+        )
+    }
     // Search runs in the database, on the normalized searchText column.
     // The old list stays on screen until the new result arrives (no flicker while typing).
     var visibleNotes by remember { mutableStateOf(notes) }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -38,7 +39,10 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit,
     onBack: () -> Unit,
     fontSize: FontSizeChoice,
-    onFontSizeChange: (FontSizeChoice) -> Unit
+    onFontSizeChange: (FontSizeChoice) -> Unit,
+    dynamicColorSupported: Boolean,
+    dynamicColor: Boolean,
+    onDynamicColorChange: (Boolean) -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
     val bgColor = MaterialTheme.colorScheme.background
@@ -129,6 +133,43 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
                     )
+                }
+
+                // Third row: the colours of the wallpaper. Only phones with Android 12 or newer can
+                // do it, so the others do not see a switch that would do nothing.
+                if (dynamicColorSupported) {
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // The whole row is the switch (better for screen readers and for thumbs)
+                            .toggleable(
+                                value = dynamicColor,
+                                onValueChange = onDynamicColorChange,
+                                role = Role.Switch
+                            )
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Dynamic color",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Use the colors of your wallpaper",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                            )
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        // onCheckedChange = null: the row above is the button
+                        Switch(checked = dynamicColor, onCheckedChange = null)
+                    }
                 }
             }
 

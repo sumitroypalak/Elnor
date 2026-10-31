@@ -65,10 +65,21 @@ internal fun ElnorBottomBar(
     onSelect: (HomeTab) -> Unit,
     onNewNote: () -> Unit
 ) {
-    val barColor = if (dark) MaterialTheme.colorScheme.surface else Color(0xFF24243A)
-    val highlight =
-        if (dark) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary
-    val onBar = Color(0xFFE4E0FF)
+    // With the wallpaper colours (dynamic colour) the bar takes its colours from the theme. The
+    // pairs are made to be read together (inverse surface with its text), so the icons and names
+    // stay clear on any wallpaper: light theme = dark bar, dark theme = the card colour.
+    val scheme = MaterialTheme.colorScheme
+    val dynamic = LocalDynamicColor.current
+    val barColor = when {
+        dynamic -> if (dark) scheme.surface else scheme.inverseSurface
+        dark -> scheme.surface
+        else -> Color(0xFF24243A)
+    }
+    val highlight = if (dark) scheme.primaryContainer else scheme.primary
+    val onBar = when {
+        dynamic -> if (dark) scheme.onSurface else scheme.inverseOnSurface
+        else -> Color(0xFFE4E0FF)
+    }
 
     // 1 for the selected tab, 0 for the others. They are read only while measuring and drawing,
     // so the bar does not recompose on every frame of the animation.
