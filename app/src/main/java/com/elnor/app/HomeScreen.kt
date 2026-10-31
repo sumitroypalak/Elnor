@@ -13,6 +13,8 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Check
@@ -28,9 +30,12 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -105,6 +110,19 @@ fun ElnorApp(
     // List (one note per row) or grid (two columns). Remembered on the phone.
     val context = LocalContext.current
     var viewMode by remember { mutableStateOf(loadNotesViewMode(context)) }
+
+    // Recent searches: listed under the search field while it is focused and empty
+    val focusManager = LocalFocusManager.current
+    var recentSearches by remember { mutableStateOf(loadRecentSearches(context)) }
+    var searchFocused by remember { mutableStateOf(false) }
+    // Saves a search the user really made (not every letter typed)
+    fun commitSearch(text: String) {
+        val updated = RecentSearches.add(recentSearches, text)
+        if (updated != recentSearches) {
+            recentSearches = updated
+            saveRecentSearches(context, updated)
+        }
+    }
 
     // A note whose final save failed after its page closed (for example the storage is full).
     // Its text is not on any screen any more, so it can still be copied from this message.
@@ -349,7 +367,18 @@ fun ElnorApp(
                             if (it != search) selectedIds = emptySet()
                             search = it
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { state ->
+                                // Leaving the field with a search typed counts as a search
+                                if (searchFocused && !state.isFocused) commitSearch(search)
+                                searchFocused = state.isFocused
+                            },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            commitSearch(search)
+                            focusManager.clearFocus()
+                        }),
                         placeholder = { Text("Search your notes...") },
                         leadingIcon = {
                             Icon(Icons.Default.Search, contentDescription = null)
@@ -372,6 +401,26 @@ fun ElnorApp(
                         shape = CircleShape,
                         colors = searchColors
                     )
+
+                    if (searchFocused && search.isEmpty() && recentSearches.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        RecentSearchesPanel(
+                            items = recentSearches,
+                            onPick = { picked ->
+                                search = picked
+                                selectedIds = emptySet()
+                                focusManager.clearFocus()
+                            },
+                            onRemove = { item ->
+                                recentSearches = RecentSearches.remove(recentSearches, item)
+                                saveRecentSearches(context, recentSearches)
+                            },
+                            onClearAll = {
+                                recentSearches = emptyList()
+                                saveRecentSearches(context, emptyList())
+                            }
+                        )
+                    }
 
                     Spacer(Modifier.height(24.dp))
 
@@ -501,6 +550,8 @@ fun ElnorApp(
                                     if (selectionMode) {
                                         toggleSelected(note.id)
                                     } else {
+                                        // Opening a result shows the search was useful: remember it
+                                        commitSearch(search)
                                         editingNoteId = note.id
                                         editorOpen = true
                                     }
