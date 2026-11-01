@@ -2,7 +2,10 @@
 
 package com.elnor.app
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
@@ -217,6 +220,20 @@ fun EditorScreen(
         disabledIndicatorColor = Color.Transparent
     )
 
+    // Save the note as a file: Android's "Save as" screen asks where. The text is taken when the
+    // user has chosen the place, so the file has what is on the screen at that moment.
+    var shareMenuOpen by remember { mutableStateOf(false) }
+    val saveTxtLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(NoteExportFormat.TXT.mimeType)
+    ) { uri ->
+        if (uri != null) saveNoteToUri(context, uri, title, bodyValue.text, NoteExportFormat.TXT)
+    }
+    val saveMdLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(NoteExportFormat.MD.mimeType)
+    ) { uri ->
+        if (uri != null) saveNoteToUri(context, uri, title, bodyValue.text, NoteExportFormat.MD)
+    }
+
     Scaffold(
         containerColor = bgColor,
         // imePadding: the message must stay above the keyboard
@@ -251,12 +268,48 @@ fun EditorScreen(
                         IconButton(onClick = { copyTextToClipboard(context, copyText) }) {
                             Icon(CopyIcon, contentDescription = "Copy note text")
                         }
-                        // Share: opens Android's Share sheet with the same text as Copy
-                        IconButton(onClick = {
-                            AppLock.expectExternalScreen() // the Share sheet is not "leaving" Elnor
-                            shareNote(context, title, bodyValue.text)
-                        }) {
-                            Icon(Icons.Default.Share, contentDescription = "Share note")
+                        // Share and save: one button (the bar has no room for one more), with a
+                        // small menu: share the text, or save the note as a .txt or .md file
+                        Box {
+                            IconButton(onClick = { shareMenuOpen = true }) {
+                                Icon(Icons.Default.Share, contentDescription = "Share or save note")
+                            }
+                            DropdownMenu(
+                                expanded = shareMenuOpen,
+                                onDismissRequest = { shareMenuOpen = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Share") },
+                                    onClick = {
+                                        shareMenuOpen = false
+                                        AppLock.expectExternalScreen() // the Share sheet is not "leaving" Elnor
+                                        shareNote(context, title, bodyValue.text)
+                                    }
+                                )
+                                for (format in NoteExportFormat.entries) {
+                                    DropdownMenuItem(
+                                        text = { Text(format.label) },
+                                        onClick = {
+                                            shareMenuOpen = false
+                                            AppLock.expectExternalScreen() // the "Save as" screen is not "leaving" Elnor
+                                            val name = NoteExport.fileName(title, bodyValue.text, format)
+                                            val launched = runCatching {
+                                                when (format) {
+                                                    NoteExportFormat.TXT -> saveTxtLauncher.launch(name)
+                                                    NoteExportFormat.MD -> saveMdLauncher.launch(name)
+                                                }
+                                            }.isSuccess
+                                            if (!launched) {
+                                                Toast.makeText(
+                                                    context.applicationContext,
+                                                    "Could not open the Save screen",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                     if (canDelete) {
