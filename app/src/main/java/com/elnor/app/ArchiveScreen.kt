@@ -2,6 +2,9 @@
 
 package com.elnor.app
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterExitState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -43,16 +46,56 @@ internal fun ArchiveScreen(
     editorViewModel: NoteEditorViewModel,
     onBack: () -> Unit
 ) {
-    val bgColor = MaterialTheme.colorScheme.background
+    // These live here, above the animation, so they are the same for the list and for the editor
+    // while one slides in and the other goes out.
     // null until the first list is read, so "Archive is empty" does not flash on the screen
     val archived by repository.archivedNotes.collectAsState<List<Note>, List<Note>?>(initial = null)
-    var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     // The note that is open in the editor (by id). Kept when the screen is recreated.
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
-    val notes = archived
 
-    val openId = editingId
+    // The editor rises a little and fades in over the list, and fades away when it closes
+    AnimatedContent(
+        targetState = editingId,
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        transitionSpec = { Motion.page(opening = targetState != null) },
+        label = "archiveEditor"
+    ) { shownId ->
+        ArchiveContent(
+            repository = repository,
+            editorViewModel = editorViewModel,
+            notes = archived,
+            openId = shownId,
+            // A page that is already sliding out must not answer Back a second time
+            leaving = transition.targetState == EnterExitState.PostExit,
+            query = query,
+            onQueryChange = { query = it },
+            onOpenNote = { editingId = it },
+            onCloseEditor = { editingId = null },
+            onBack = onBack
+        )
+    }
+}
+
+/** The list of archived notes ([openId] null), or the editor of one note (the animation switches). */
+@Composable
+private fun ArchiveContent(
+    repository: NoteRepository,
+    editorViewModel: NoteEditorViewModel,
+    notes: List<Note>?,
+    openId: Long?,
+    leaving: Boolean,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onOpenNote: (Long) -> Unit,
+    onCloseEditor: () -> Unit,
+    onBack: () -> Unit
+) {
+    val bgColor = MaterialTheme.colorScheme.background
+    var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
+
     if (openId != null) {
         val editing = notes?.firstOrNull { it.id == openId }
         when {
@@ -67,15 +110,20 @@ internal fun ArchiveScreen(
 
             // The note is gone (deleted or unarchived meanwhile): back to the list
             editing == null -> {
-                LaunchedEffect(openId) { editingId = null }
+                LaunchedEffect(openId) { onCloseEditor() }
                 Box(Modifier.fillMaxSize().background(bgColor))
             }
 
-            else -> EditorScreen(
-                note = editing,
-                viewModel = editorViewModel,
-                onClose = { editingId = null }
-            )
+            else -> {
+                EditorScreen(
+                    note = editing,
+                    viewModel = editorViewModel,
+                    onClose = onCloseEditor
+                )
+                // Registered after the editor, so it is asked first: while the page slides out,
+                // Back must not save and close it a second time
+                BackHandler(enabled = leaving) { }
+            }
         }
         return
     }
@@ -111,7 +159,7 @@ internal fun ArchiveScreen(
             if (!notes.isNullOrEmpty()) {
                 OutlinedTextField(
                     value = query,
-                    onValueChange = { query = it },
+                    onValueChange = onQueryChange,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 8.dp),
@@ -120,7 +168,7 @@ internal fun ArchiveScreen(
                     // The clear button is only there while there is text
                     trailingIcon = if (query.isNotEmpty()) {
                         {
-                            IconButton(onClick = { query = "" }) {
+                            IconButton(onClick = { onQueryChange("") }) {
                                 Icon(Icons.Default.Clear, contentDescription = "Clear search")
                             }
                         }
@@ -173,7 +221,7 @@ internal fun ArchiveScreen(
                     items(shown, key = { it.id }) { note ->
                         ArchivedNoteCard(
                             note = note,
-                            onOpen = { editingId = note.id },
+                            onOpen = { onOpenNote(note.id) },
                             onUnarchive = {
                                 ApplicationScope.scope.launch {
                                     repository.unarchiveMany(listOf(note.id))

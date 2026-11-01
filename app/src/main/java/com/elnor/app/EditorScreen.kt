@@ -6,6 +6,15 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
@@ -104,6 +113,8 @@ fun EditorScreen(
     } else {
         null
     }
+    // The last link the cursor was in. The link button shows it while it fades out.
+    val lastLink = remember { arrayOfNulls<LinkSpan>(1) }
 
     // A formatting button: [change] gets the text and the selection and returns the new text. The
     // page shows it and the ViewModel remembers it (saved after a typing pause, like typing).
@@ -337,7 +348,12 @@ fun EditorScreen(
                 .padding(horizontal = 8.dp)
         ) {
             // Find in note (opened by the search button at the top)
-            if (findOpen) {
+            // The bar opens downwards from the top and fades in, and closes the same way
+            AnimatedVisibility(
+                visible = findOpen,
+                enter = expandVertically(Motion.short()) + fadeIn(Motion.short()),
+                exit = shrinkVertically(Motion.short()) + fadeOut(Motion.short())
+            ) {
                 FindBar(
                     query = findQuery,
                     onQueryChange = {
@@ -441,7 +457,14 @@ fun EditorScreen(
 
             // Bold, heading and list buttons for the text (not for the title). The button for the
             // link the cursor is in (Call / Email / Open) shares the row, so it takes no extra height.
-            if (bodyFocused) {
+            // The row rises from the bottom and fades in when the text gets the focus
+            AnimatedVisibility(
+                visible = bodyFocused,
+                enter = expandVertically(Motion.short()) +
+                    slideInVertically(Motion.short()) { it / 2 } + fadeIn(Motion.short()),
+                exit = shrinkVertically(Motion.short()) +
+                    slideOutVertically(Motion.short()) { it / 2 } + fadeOut(Motion.short())
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -454,16 +477,29 @@ fun EditorScreen(
                         onBullet = { applyFormat(MarkdownFormat::toggleBullet) },
                         onNumbered = { applyFormat(MarkdownFormat::toggleNumbered) }
                     )
-                    if (activeLink != null) {
-                        Spacer(Modifier.width(8.dp))
-                        LinkActionChip(
-                            link = activeLink,
-                            onClick = {
-                                AppLock.expectExternalScreen() // the dialer / browser is not "leaving" Elnor
-                                openLink(context, activeLink)
-                            },
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
+                    // The link button fades in and out with a small zoom. While it goes out the
+                    // last link is still shown (the cursor has already left it).
+                    if (activeLink != null) lastLink[0] = activeLink
+                    AnimatedVisibility(
+                        visible = activeLink != null,
+                        modifier = Modifier.weight(1f, fill = false),
+                        enter = fadeIn(Motion.short()) + scaleIn(Motion.short(), initialScale = 0.85f),
+                        exit = fadeOut(Motion.short()) + scaleOut(Motion.short(), targetScale = 0.85f)
+                    ) {
+                        val shownLink = lastLink[0]
+                        if (shownLink != null) {
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Spacer(Modifier.width(8.dp))
+                                LinkActionChip(
+                                    link = shownLink,
+                                    onClick = {
+                                        AppLock.expectExternalScreen() // the dialer / browser is not "leaving" Elnor
+                                        openLink(context, shownLink)
+                                    },
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                            }
+                        }
                     }
                 }
             }
