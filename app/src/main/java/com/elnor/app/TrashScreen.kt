@@ -52,7 +52,10 @@ internal fun TrashScreen(
     val notes = trashed
     // The time chosen in Settings > Trash (30 days if never changed)
     val context = LocalContext.current
-    val trashDays = remember { loadTrashRetention(context).days }
+    val trashRetention = remember { loadTrashRetention(context) }
+    val trashDays = trashRetention.days
+    // Taken once when the page opens: "days left" does not need to change while it is on screen
+    val now = remember { System.currentTimeMillis() }
 
     // Opening the Trash also removes the notes that have been here for the chosen time. The list
     // updates by itself when they are gone.
@@ -139,6 +142,8 @@ internal fun TrashScreen(
                 items(notes, key = { it.id }) { note ->
                     TrashNoteCard(
                         note = note,
+                        now = now,
+                        retentionMs = trashRetention.millis,
                         onRestore = {
                             ApplicationScope.scope.launch { repository.restore(note.id) }
                         },
@@ -206,6 +211,8 @@ internal fun TrashScreen(
 @Composable
 private fun TrashNoteCard(
     note: Note,
+    now: Long,
+    retentionMs: Long,
     onRestore: () -> Unit,
     onDeleteForever: () -> Unit
 ) {
@@ -249,6 +256,17 @@ private fun TrashNoteCard(
                 "Deleted " + formatNoteDate(note.deletedAt ?: note.updatedAt),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+            )
+            // How long the note can still be restored. Red when 3 days or less are left.
+            val deletedAt = note.deletedAt ?: note.updatedAt
+            val urgent = TrashDaysLeft.isUrgent(deletedAt, now, retentionMs)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                TrashDaysLeft.label(deletedAt, now, retentionMs),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (urgent) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (urgent) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
