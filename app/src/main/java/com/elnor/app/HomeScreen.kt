@@ -532,8 +532,10 @@ fun ElnorApp(
                             )
                         }
                     } else {
-                        // One card, used by the list and by the grid
-                        val noteItem: @Composable (Note) -> Unit = { note ->
+                        // One card, used by the list and by the grid. [itemModifier] carries
+                        // Modifier.animateItem() from the lazy list / grid, so a note that is added,
+                        // removed, pinned or re-sorted fades and slides instead of jumping.
+                        val noteItem: @Composable (Note, Modifier) -> Unit = { note, itemModifier ->
                             // The color comes from the note's id, not from its place in the list,
                             // so it stays the same when notes are added, pinned or searched
                             val cardColor = if (dark) {
@@ -546,6 +548,7 @@ fun ElnorApp(
                                 note = note,
                                 cardColor = cardColor,
                                 dark = dark,
+                                modifier = itemModifier,
                                 onClick = {
                                     if (selectionMode) {
                                         toggleSelected(note.id)
@@ -613,7 +616,9 @@ fun ElnorApp(
                                 verticalArrangement = Arrangement.spacedBy(13.dp),
                                 contentPadding = PaddingValues(bottom = 100.dp)
                             ) {
-                                items(shownNotes, key = { it.id }) { note -> noteItem(note) }
+                                items(shownNotes, key = { it.id }) { note ->
+                                    noteItem(note, Modifier.animateItem())
+                                }
                             }
                         } else {
                             // Two columns. Every card is as tall as its text, so they fit together.
@@ -625,7 +630,9 @@ fun ElnorApp(
                                 horizontalArrangement = Arrangement.spacedBy(13.dp),
                                 contentPadding = PaddingValues(bottom = 100.dp)
                             ) {
-                                items(shownNotes, key = { it.id }) { note -> noteItem(note) }
+                                items(shownNotes, key = { it.id }) { note ->
+                                    noteItem(note, Modifier.animateItem())
+                                }
                             }
                         }
                     }
