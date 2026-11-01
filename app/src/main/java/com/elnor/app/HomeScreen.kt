@@ -3,6 +3,14 @@
 package com.elnor.app
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,6 +50,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // ----------------------------- Notes screen --------------------------------
+
+/** What the notes screen shows below the "Your notes" line. */
+private enum class NotesPane { LOADING, EMPTY, NOTES }
 
 /** How long the user must stop typing in the search field before the search runs (milliseconds). */
 private const val SEARCH_DEBOUNCE_MS = 200L
@@ -189,7 +200,19 @@ fun ElnorApp(
         }
     }
 
-    if (editorOpen) {
+    // The editor page rises a little and fades in over the list; when it closes it fades away
+    // and the list shows through. The page colour behind keeps the two from showing through
+    // each other.
+    AnimatedContent(
+        targetState = editorOpen,
+        modifier = Modifier.fillMaxSize().background(bgColor),
+        transitionSpec = { Motion.page(opening = targetState) },
+        label = "homeEditor"
+    ) { showEditor ->
+    // A page that is already sliding out must not answer Back again (the editor would save and
+    // close twice). Registered after the page below, so it is asked first.
+    val leaving = transition.targetState == EnterExitState.PostExit
+    if (showEditor) {
         if (editingNoteId != null && (!notesLoaded || (editingNote == null && archivedNotes == null))) {
             // The page came back after the app was closed: wait for the notes, so the note that
             // was open is found and not mistaken for a new one
@@ -203,6 +226,7 @@ fun ElnorApp(
                 onClose = { editorOpen = false }
             )
         }
+        BackHandler(enabled = leaving) { }
     } else {
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val drawerScope = rememberCoroutineScope()
@@ -225,14 +249,23 @@ fun ElnorApp(
                 containerColor = bgColor,
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
-                  if (selectionMode) {
+                  // The normal bar and the bar of the selection fade into each other. The number of
+                  // selected notes is remembered, so the bar that is fading out does not show "0".
+                  val lastSelectedCount = remember { intArrayOf(0) }
+                  if (selectionMode) lastSelectedCount[0] = selectedIds.size
+                  Crossfade(
+                      targetState = selectionMode,
+                      animationSpec = Motion.short(),
+                      label = "topBar"
+                  ) { selecting ->
+                  if (selecting) {
                     // The selected notes. An archived note (a search result) cannot be pinned, and
                     // "Archive" does nothing for it, so those actions only look at the other notes.
                     val selectedNotes = everyNote.filter { it.id in selectedIds }
                     val pinTargets = selectedNotes.filter { it.archivedAt == null }
                     val allArchived = selectedNotes.isNotEmpty() && pinTargets.isEmpty()
                     SelectionTopBar(
-                        count = selectedIds.size,
+                        count = lastSelectedCount[0],
                         canPin = pinTargets.isNotEmpty(),
                         allPinned = pinTargets.isNotEmpty() && pinTargets.all { it.pinnedAt != null },
                         allArchived = allArchived,
@@ -285,6 +318,7 @@ fun ElnorApp(
                         )
                     )
                   }
+                  }
                 },
                 // The bottom bar floats over the list, in the place of the old "New note" button
                 floatingActionButton = {
@@ -307,9 +341,15 @@ fun ElnorApp(
                 },
                 floatingActionButtonPosition = FabPosition.Center
             ) { padding ->
+                // The three tabs fade into each other (no slide: they are on the same level).
                 // Collection is a placeholder for now. Notes and Tasks have content.
-                if (homeTab != HomeTab.NOTE) {
-                    if (homeTab == HomeTab.TASK) {
+                Crossfade(
+                    targetState = homeTab,
+                    animationSpec = Motion.short(),
+                    label = "homeTab"
+                ) { tab ->
+                if (tab != HomeTab.NOTE) {
+                    if (tab == HomeTab.TASK) {
                         TasksScreen(
                             repository = taskRepository,
                             padding = padding,
@@ -324,8 +364,7 @@ fun ElnorApp(
                             padding = padding
                         )
                     }
-                    return@Scaffold
-                }
+                } else {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -402,24 +441,31 @@ fun ElnorApp(
                         colors = searchColors
                     )
 
-                    if (searchFocused && search.isEmpty() && recentSearches.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        RecentSearchesPanel(
-                            items = recentSearches,
-                            onPick = { picked ->
-                                search = picked
-                                selectedIds = emptySet()
-                                focusManager.clearFocus()
-                            },
-                            onRemove = { item ->
-                                recentSearches = RecentSearches.remove(recentSearches, item)
-                                saveRecentSearches(context, recentSearches)
-                            },
-                            onClearAll = {
-                                recentSearches = emptyList()
-                                saveRecentSearches(context, emptyList())
-                            }
-                        )
+                    // The panel opens downwards and fades in, and closes the same way
+                    AnimatedVisibility(
+                        visible = searchFocused && search.isEmpty() && recentSearches.isNotEmpty(),
+                        enter = expandVertically(Motion.short()) + fadeIn(Motion.short()),
+                        exit = shrinkVertically(Motion.short()) + fadeOut(Motion.short())
+                    ) {
+                        Column {
+                            Spacer(Modifier.height(8.dp))
+                            RecentSearchesPanel(
+                                items = recentSearches,
+                                onPick = { picked ->
+                                    search = picked
+                                    selectedIds = emptySet()
+                                    focusManager.clearFocus()
+                                },
+                                onRemove = { item ->
+                                    recentSearches = RecentSearches.remove(recentSearches, item)
+                                    saveRecentSearches(context, recentSearches)
+                                },
+                                onClearAll = {
+                                    recentSearches = emptyList()
+                                    saveRecentSearches(context, emptyList())
+                                }
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(24.dp))
@@ -497,21 +543,32 @@ fun ElnorApp(
 
                     Spacer(Modifier.height(14.dp))
 
-                    if (!notesLoaded && search.isBlank()) {
+                    // What fills the rest of the screen: the loading circle, the empty message or
+                    // the notes. They fade into each other.
+                    val pane = when {
+                        !notesLoaded && search.isBlank() -> NotesPane.LOADING
+                        shownNotes.isEmpty() -> NotesPane.EMPTY
+                        else -> NotesPane.NOTES
+                    }
+                    Crossfade(
+                        targetState = pane,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        animationSpec = Motion.short(),
+                        label = "notesPane"
+                    ) { shownPane ->
+                    if (shownPane == NotesPane.LOADING) {
                         // The database has not answered yet (a split second at start-up)
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
+                            modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
                             CircularProgressIndicator()
                         }
-                    } else if (shownNotes.isEmpty()) {
+                    } else if (shownPane == NotesPane.EMPTY) {
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
+                            modifier = Modifier.fillMaxSize(),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
@@ -609,10 +666,17 @@ fun ElnorApp(
                             )
                         }
 
-                        if (viewMode == NotesViewMode.LIST) {
+                        // The list and the grid fade into each other when the view is switched
+                        Crossfade(
+                            targetState = viewMode,
+                            modifier = Modifier.fillMaxSize(),
+                            animationSpec = Motion.short(),
+                            label = "viewMode"
+                        ) { shownMode ->
+                        if (shownMode == NotesViewMode.LIST) {
                             LazyColumn(
                                 state = listState,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(13.dp),
                                 contentPadding = PaddingValues(bottom = 100.dp)
                             ) {
@@ -625,7 +689,7 @@ fun ElnorApp(
                             LazyVerticalStaggeredGrid(
                                 columns = StaggeredGridCells.Fixed(2),
                                 state = gridState,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.fillMaxSize(),
                                 verticalItemSpacing = 13.dp,
                                 horizontalArrangement = Arrangement.spacedBy(13.dp),
                                 contentPadding = PaddingValues(bottom = 100.dp)
@@ -635,8 +699,12 @@ fun ElnorApp(
                                 }
                             }
                         }
+                        } // end of Crossfade (list / grid)
                     }
+                    } // end of Crossfade (loading / empty / notes)
                 }
+                } // end of the Note tab
+                } // end of Crossfade (tabs)
             }
         }
 
@@ -666,4 +734,5 @@ fun ElnorApp(
             )
         }
     }
+    } // end of AnimatedContent (list / editor)
 }

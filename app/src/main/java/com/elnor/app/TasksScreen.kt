@@ -108,6 +108,8 @@ fun TasksScreen(
             ) {
                 items(shown, key = { it.id }) { task ->
                     TaskRow(
+                        // A task that is checked off, added or removed slides to its new place
+                        modifier = Modifier.animateItem(),
                         task = task,
                         today = today,
                         onToggle = { done ->
@@ -246,11 +248,12 @@ private fun TaskRow(
     task: Task,
     today: LocalDate,
     onToggle: (Boolean) -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val onSurface = MaterialTheme.colorScheme.onSurface
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

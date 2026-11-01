@@ -11,6 +11,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -159,6 +162,17 @@ class MainActivity : FragmentActivity() {
 /** The screens the user can open from the home screen. */
 private enum class AppScreen { HOME, SETTINGS, TRASH, ARCHIVE, APP_LOCK, BACKUP }
 
+/**
+ * How deep a screen is. A screen with a bigger number than the one before slides in from the
+ * right (going in), a smaller number slides back to the left (going out).
+ */
+private val AppScreen.depth: Int
+    get() = when (this) {
+        AppScreen.HOME -> 0
+        AppScreen.SETTINGS, AppScreen.TRASH, AppScreen.ARCHIVE -> 1
+        AppScreen.APP_LOCK, AppScreen.BACKUP -> 2
+    }
+
 @Composable
 fun ElnorRoot(
     repository: NoteRepository,
@@ -198,9 +212,30 @@ fun ElnorRoot(
                     .fillMaxSize()
                     .then(if (locked) Modifier.clearAndSetSemantics { } else Modifier)
             ) {
-                when (screen) {
+                // Back goes one step up. These are here, outside the animation, and look at the
+                // screen that is being opened: while a screen is still sliding out, it must not
+                // answer Back a second time.
+                BackHandler(
+                    enabled = screen == AppScreen.SETTINGS || screen == AppScreen.ARCHIVE ||
+                        screen == AppScreen.TRASH
+                ) { screen = AppScreen.HOME }
+                BackHandler(
+                    enabled = screen == AppScreen.BACKUP || screen == AppScreen.APP_LOCK
+                ) { screen = AppScreen.SETTINGS }
+
+                // A screen opens with a small slide and a fade (to the right going in, back to the
+                // left going out). The background behind keeps the page colour while two screens
+                // fade over each other.
+                AnimatedContent(
+                    targetState = screen,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                    transitionSpec = { Motion.sideways(forward = targetState.depth > initialState.depth) },
+                    label = "screen"
+                ) { shownScreen ->
+                when (shownScreen) {
                     AppScreen.SETTINGS -> {
-                        BackHandler { screen = AppScreen.HOME }
                         SettingsScreen(
                             themeMode = themeMode,
                             onThemeModeChange = {
@@ -233,7 +268,6 @@ fun ElnorRoot(
                     }
 
                     AppScreen.BACKUP -> {
-                        BackHandler { screen = AppScreen.SETTINGS }
                         BackupScreen(
                             repository = repository,
                             onBack = { screen = AppScreen.SETTINGS }
@@ -241,12 +275,10 @@ fun ElnorRoot(
                     }
 
                     AppScreen.APP_LOCK -> {
-                        BackHandler { screen = AppScreen.SETTINGS }
                         AppLockScreen(onBack = { screen = AppScreen.SETTINGS })
                     }
 
                     AppScreen.ARCHIVE -> {
-                        BackHandler { screen = AppScreen.HOME }
                         ArchiveScreen(
                             repository = repository,
                             editorViewModel = editorViewModel,
@@ -255,7 +287,6 @@ fun ElnorRoot(
                     }
 
                     AppScreen.TRASH -> {
-                        BackHandler { screen = AppScreen.HOME }
                         TrashScreen(
                             repository = repository,
                             onBack = { screen = AppScreen.HOME }
@@ -274,9 +305,18 @@ fun ElnorRoot(
                         )
                     }
                 }
+                }
             }
 
-            if (locked) LockedScreen(onUnlock = onUnlockClick)
+            // The lock screen fades away when the app is unlocked. It never fades IN: the notes
+            // must not be visible for even a moment when the app locks.
+            AnimatedVisibility(
+                visible = locked,
+                enter = EnterTransition.None,
+                exit = Motion.fadeOutShort
+            ) {
+                LockedScreen(onUnlock = onUnlockClick)
+            }
         }
     }
 }
