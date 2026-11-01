@@ -5,7 +5,7 @@ A simple Android note-taking app.
 Features
 
 - Create notes
-- Edit notes
+- Edit notes. The keyboard opens at once only for a new note; an existing note opens without the keyboard, so it can be read in peace. Tap the text to start typing
 - Undo and Redo buttons at the top of the note page (a word at a time)
 - "Last edited" date and time under the title of a note
 - Word and character count under the text of a note, e.g. "12 words · 68 characters" (works for Bengali too)

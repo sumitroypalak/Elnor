@@ -179,9 +179,11 @@ fun EditorScreen(
         viewModel.onBodyChange(bodyValue.text, bodyValue.selection.start, bodyValue.selection.end)
     }
 
-    // Open the keyboard as soon as the page opens
+    // Open the keyboard as soon as the page opens, but only for a NEW note, where the user wants
+    // to type at once. An existing note is opened to read it, so the keyboard stays closed until
+    // the user taps the text (the formatting bar appears then too, because it follows the focus).
     LaunchedEffect(Unit) {
-        runCatching { bodyFocus.requestFocus() }
+        if (note == null) runCatching { bodyFocus.requestFocus() }
     }
 
     // The last save did not work (for example the storage is full). The text is still here.
