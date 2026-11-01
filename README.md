@@ -25,6 +25,7 @@ Features
 - Archive: keep a note without seeing it on the home screen (three-dot menu of a note, or the selection bar). Archived notes are not in the home list, but the search finds them (marked "Archived"). Open them from the side menu > Archive: search there, tap a note to read and edit it (it stays archived), unarchive it or delete it. "Undo" appears right after archiving
 - Pin notes: "Pin" in the three-dot menu of a note keeps it at the top of the list ("Unpin" to undo)
 - Show notes as a list or as a two-column grid (button next to "Your notes", remembered)
+- Smooth list animation: when a note is added, deleted, archived, pinned or the sort order or the search changes, the cards fade in and out and slide to their new place instead of jumping (both in the list and in the grid)
 - Delete notes (they go to the Trash first)
 - Trash: restore a note, delete it for good, or empty the Trash
 - Each note in the Trash shows how long is left before it is deleted for good ("Deleted for good in 12 days", "tomorrow" or "today"). With 3 days or less left the line is red, so a note can still be restored in time

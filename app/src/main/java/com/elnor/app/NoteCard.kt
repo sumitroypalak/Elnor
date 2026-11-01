@@ -43,6 +43,9 @@ data class NoteMenuAction(
  *
  * [onLongClick] is called when the card is pressed and held (the home screen starts the
  * selection of notes with it). [selected] draws the card as chosen: a border and a check mark.
+ *
+ * [modifier] is applied first. The home screen passes Modifier.animateItem() through it, which
+ * is only possible inside the lazy list / grid scope, so the card itself cannot add it.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -51,6 +54,7 @@ fun NoteCard(
     cardColor: Color,
     dark: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     menuActions: List<NoteMenuAction> = emptyList(),
     onLongClick: (() -> Unit)? = null,
     selected: Boolean = false
@@ -60,7 +64,7 @@ fun NoteCard(
 
     // Not Card(onClick = ...): that one has no long press. The clip makes the press ripple round.
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
