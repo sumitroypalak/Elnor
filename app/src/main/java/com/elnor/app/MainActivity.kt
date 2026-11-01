@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -62,6 +63,9 @@ class MainActivity : FragmentActivity() {
         // (Android 12+), otherwise the Elnor colours. The same one ElnorTheme will use.
         val initialColors = elnorColorScheme(initialDark, this, loadDynamicColor(applicationContext))
         applyWindowTheme(window, window.decorView, initialDark, initialColors.background)
+
+        // The saved haptic switch, read before the first screen is drawn
+        HapticSettings.enabled = loadHapticEnabled(applicationContext)
 
         // Reads the app lock settings. A cold start with the lock on starts locked.
         AppLock.init(applicationContext)
@@ -153,7 +157,12 @@ class MainActivity : FragmentActivity() {
             },
             onError = { userCancelled ->
                 AppLock.promptShowing = false
-                if (userCancelled) AppLock.autoPromptAllowed = false
+                if (userCancelled) {
+                    AppLock.autoPromptAllowed = false
+                } else {
+                    // The unlock really failed (for example too many wrong tries): a short "no"
+                    performHaptic(window.decorView, HapticKind.REJECT)
+                }
             }
         )
     }
@@ -193,6 +202,10 @@ fun ElnorRoot(
     // The colours of the wallpaper (Settings > Appearance > Dynamic colour). Only Android 12+ can.
     val dynamicColorSupported = remember { isDynamicColorSupported() }
     var dynamicColor by remember { mutableStateOf(loadDynamicColor(context)) }
+    // The light vibrations (Settings > Appearance > Haptic feedback). The value is also kept in
+    // HapticSettings, where every screen reads it when it asks for a vibration.
+    var hapticEnabled by remember { mutableStateOf(HapticSettings.enabled) }
+    val view = LocalView.current
     var screen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
     val locked by AppLock.locked.collectAsState()
     val appLockEnabled by AppLock.enabled.collectAsState()
@@ -263,6 +276,14 @@ fun ElnorRoot(
                             onDynamicColorChange = {
                                 dynamicColor = it
                                 saveDynamicColor(context, it)
+                            },
+                            hapticEnabled = hapticEnabled,
+                            onHapticEnabledChange = {
+                                hapticEnabled = it
+                                HapticSettings.enabled = it
+                                saveHapticEnabled(context, it)
+                                // A short tick so the user feels what was just switched on
+                                if (it) performHaptic(view, HapticKind.CONFIRM)
                             }
                         )
                     }

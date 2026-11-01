@@ -42,7 +42,9 @@ fun SettingsScreen(
     onFontSizeChange: (FontSizeChoice) -> Unit,
     dynamicColorSupported: Boolean,
     dynamicColor: Boolean,
-    onDynamicColorChange: (Boolean) -> Unit
+    onDynamicColorChange: (Boolean) -> Unit,
+    hapticEnabled: Boolean,
+    onHapticEnabledChange: (Boolean) -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
     val bgColor = MaterialTheme.colorScheme.background
@@ -170,6 +172,38 @@ fun SettingsScreen(
                         // onCheckedChange = null: the row above is the button
                         Switch(checked = dynamicColor, onCheckedChange = null)
                     }
+                }
+
+                // Last row: the light vibrations (pin, delete, select, ...). On every phone.
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = hapticEnabled,
+                            onValueChange = onHapticEnabledChange,
+                            role = Role.Switch
+                        )
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Haptic feedback",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Light vibration when you pin, delete or select",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        )
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Switch(checked = hapticEnabled, onCheckedChange = null)
                 }
             }
 

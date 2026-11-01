@@ -65,6 +65,8 @@ fun EditorScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val bodyFocus = remember { FocusRequester() }
     val context = LocalContext.current
+    // Light vibrations (follow Settings > Haptic feedback)
+    val haptic = rememberHaptic()
 
     // "Find in note": the bar above the title, the word, and which found place is the chosen one.
     // It only looks at the text, it never changes the note.
@@ -119,6 +121,7 @@ fun EditorScreen(
     // A formatting button: [change] gets the text and the selection and returns the new text. The
     // page shows it and the ViewModel remembers it (saved after a typing pause, like typing).
     fun applyFormat(change: (String, Int, Int) -> TextEdit) {
+        haptic(HapticKind.TICK) // Bold, Heading, Bullet and Numbered all go through here
         val selection = bodyValue.selection
         val result = change(
             bodyValue.text,
@@ -201,6 +204,7 @@ fun EditorScreen(
     val saveFailed by viewModel.saveFailed.collectAsState()
     LaunchedEffect(saveFailed) {
         if (saveFailed) {
+            haptic(HapticKind.REJECT)
             snackbarHostState.showSnackbar(
                 message = "Could not save your note. Your text is still here.",
                 duration = SnackbarDuration.Long
@@ -263,10 +267,22 @@ fun EditorScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showSnapshot(viewModel.undo()) }, enabled = canUndo) {
+                    IconButton(
+                        onClick = {
+                            haptic(HapticKind.TICK)
+                            showSnapshot(viewModel.undo())
+                        },
+                        enabled = canUndo
+                    ) {
                         Icon(UndoIcon, contentDescription = "Undo")
                     }
-                    IconButton(onClick = { showSnapshot(viewModel.redo()) }, enabled = canRedo) {
+                    IconButton(
+                        onClick = {
+                            haptic(HapticKind.TICK)
+                            showSnapshot(viewModel.redo())
+                        },
+                        enabled = canRedo
+                    ) {
                         Icon(RedoIcon, contentDescription = "Redo")
                     }
                     // Find in note: only when there is some text to look in
@@ -557,6 +573,7 @@ fun EditorScreen(
         DeleteNoteDialog(
             onConfirm = {
                 confirmDelete = false
+                haptic(HapticKind.CONFIRM)
                 viewModel.deleteNote()
                 onClose()
             },

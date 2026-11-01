@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -69,6 +70,16 @@ fun BackupScreen(
     // rememberSaveable: the result stays on the screen after rotating the phone
     var message by rememberSaveable { mutableStateOf<String?>(null) }
 
+    // The vibration for the result. The work runs off the main thread, so it only leaves the kind
+    // here and the screen performs it. Not saved, so turning the phone does not vibrate again.
+    val haptic = rememberHaptic()
+    var resultHaptic by remember { mutableStateOf<HapticKind?>(null) }
+    LaunchedEffect(resultHaptic) {
+        val kind = resultHaptic ?: return@LaunchedEffect
+        haptic(kind)
+        resultHaptic = null
+    }
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -78,10 +89,12 @@ fun BackupScreen(
         ApplicationScope.scope.launch {
             message = try {
                 val count = withContext(Dispatchers.IO) { writeBackup(context, repository, uri) }
+                resultHaptic = HapticKind.CONFIRM
                 BackupFormat.exportMessage(count)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
+                resultHaptic = HapticKind.REJECT
                 "The backup could not be saved. Please try another place."
             } finally {
                 busy = false
@@ -99,15 +112,20 @@ fun BackupScreen(
             message = try {
                 val text = withContext(Dispatchers.IO) { readBackup(context, uri) }
                 when (val parsed = BackupFormat.fromJson(text)) {
-                    is BackupParseResult.Failure -> parsed.reason.message
+                    is BackupParseResult.Failure -> {
+                        resultHaptic = HapticKind.REJECT
+                        parsed.reason.message
+                    }
                     is BackupParseResult.Success -> {
                         val summary = repository.importNotes(parsed.notes)
+                        resultHaptic = HapticKind.CONFIRM
                         BackupFormat.importMessage(summary, parsed.skipped)
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
+                resultHaptic = HapticKind.REJECT
                 "The file could not be read."
             } finally {
                 busy = false
