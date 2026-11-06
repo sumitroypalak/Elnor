@@ -120,6 +120,8 @@ fun ElnorApp(
 
     // List (one note per row) or grid (two columns). Remembered on the phone.
     val context = LocalContext.current
+    // Light vibrations: haptic(HapticKind.TICK) and so on (follows Settings > Haptic feedback)
+    val haptic = rememberHaptic()
     var viewMode by remember { mutableStateOf(loadNotesViewMode(context)) }
 
     // Recent searches: listed under the search field while it is focused and empty
@@ -141,6 +143,7 @@ fun ElnorApp(
     val lostNote by editorViewModel.lostNote.collectAsState()
     LaunchedEffect(lostNote) {
         val text = lostNote ?: return@LaunchedEffect
+        haptic(HapticKind.REJECT) // a note was lost: more than a message deserves
         val result = snackbarHostState.showSnackbar(
             message = "Your last note could not be saved.",
             actionLabel = "Copy text",
@@ -178,6 +181,7 @@ fun ElnorApp(
     }
 
     fun toggleSelected(id: Long) {
+        haptic(HapticKind.TICK) // one more note chosen (or taken out)
         selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
     }
 
@@ -185,6 +189,7 @@ fun ElnorApp(
     // which brings them back exactly as they were (also pinned, if they were pinned).
     fun archiveNotes(ids: List<Long>) {
         if (ids.isEmpty()) return
+        haptic(HapticKind.CONFIRM) // once, also for many notes
         ApplicationScope.scope.launch { repository.archiveMany(ids) }
         uiScope.launch {
             snackbarHostState.currentSnackbarData?.dismiss()
@@ -275,6 +280,7 @@ fun ElnorApp(
                             val ids = pinTargets.map { it.id }
                             // all pinned -> unpin them all, otherwise pin them all
                             val pin = !pinTargets.all { it.pinnedAt != null }
+                            haptic(HapticKind.CONFIRM)
                             ApplicationScope.scope.launch { repository.setPinnedMany(ids, pin) }
                             selectedIds = emptySet()
                         },
@@ -282,13 +288,17 @@ fun ElnorApp(
                             selectedIds = emptySet()
                             if (allArchived) {
                                 val ids = selectedNotes.map { it.id }
+                                haptic(HapticKind.CONFIRM)
                                 ApplicationScope.scope.launch { repository.unarchiveMany(ids) }
                             } else {
                                 archiveNotes(pinTargets.map { it.id })
                             }
                         },
                         onDelete = { confirmDeleteSelected = true },
-                        onSelectAll = { selectedIds = shownNotes.mapTo(HashSet()) { it.id } }
+                        onSelectAll = {
+                            haptic(HapticKind.TICK)
+                            selectedIds = shownNotes.mapTo(HashSet()) { it.id }
+                        }
                     )
                   } else {
                     // A normal-height bar: the title and the menu button share one line, so there
@@ -326,8 +336,12 @@ fun ElnorApp(
                     if (!selectionMode) ElnorBottomBar(
                         selected = homeTab,
                         dark = dark,
-                        onSelect = { homeTab = it },
+                        onSelect = {
+                            if (it != homeTab) haptic(HapticKind.TICK)
+                            homeTab = it
+                        },
                         onNewNote = {
+                            haptic(HapticKind.TICK)
                             if (homeTab == HomeTab.TASK) {
                                 // On the Task tab the "+" button adds a task, not a note
                                 newTaskOpen = true
@@ -517,6 +531,7 @@ fun ElnorApp(
                                         },
                                         onClick = {
                                             sortMenuOpen = false
+                                            if (option != sort) haptic(HapticKind.TICK)
                                             sort = option
                                             saveNotesSort(context, option)
                                         }
@@ -527,6 +542,7 @@ fun ElnorApp(
                         // The button shows the view it switches to
                         IconButton(
                             onClick = {
+                                haptic(HapticKind.TICK)
                                 viewMode = viewMode.toggled()
                                 saveNotesViewMode(context, viewMode)
                             }
@@ -618,7 +634,12 @@ fun ElnorApp(
                                 },
                                 // Touch and hold: start selecting (or select one more note)
                                 onLongClick = {
-                                    if (selectionMode) toggleSelected(note.id) else selectedIds = setOf(note.id)
+                                    if (selectionMode) {
+                                        toggleSelected(note.id)
+                                    } else {
+                                        haptic(HapticKind.LONG_PRESS) // the selection starts
+                                        selectedIds = setOf(note.id)
+                                    }
                                 },
                                 selected = note.id in selectedIds,
                                 // No three-dot menu while selecting: the bar at the top has the actions
@@ -636,6 +657,7 @@ fun ElnorApp(
                                             NoteMenuAction(
                                                 label = "Unarchive",
                                                 onClick = {
+                                                    haptic(HapticKind.CONFIRM)
                                                     ApplicationScope.scope.launch {
                                                         repository.unarchiveMany(listOf(note.id))
                                                     }
@@ -650,6 +672,7 @@ fun ElnorApp(
                                             NoteMenuAction(
                                                 label = if (note.pinnedAt != null) "Unpin" else "Pin",
                                                 onClick = {
+                                                    haptic(HapticKind.CONFIRM)
                                                     ApplicationScope.scope.launch {
                                                         repository.setPinned(note.id, note.pinnedAt == null)
                                                     }
@@ -713,6 +736,7 @@ fun ElnorApp(
                 count = selectedIds.size,
                 onConfirm = {
                     val ids = selectedIds.toList()
+                    haptic(HapticKind.CONFIRM)
                     confirmDeleteSelected = false
                     selectedIds = emptySet()
                     ApplicationScope.scope.launch { repository.moveToTrashMany(ids) }
@@ -726,6 +750,7 @@ fun ElnorApp(
             DeleteNoteDialog(
                 onConfirm = {
                     pendingDeleteId = null
+                    haptic(HapticKind.CONFIRM)
                     // The same deletion as in the editor: the note goes to the Trash. The list
                     // follows the repository, so it updates by itself.
                     ApplicationScope.scope.launch { repository.moveToTrash(deleteId) }

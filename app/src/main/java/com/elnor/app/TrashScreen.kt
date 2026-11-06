@@ -52,6 +52,8 @@ internal fun TrashScreen(
     val notes = trashed
     // The time chosen in Settings > Trash (30 days if never changed)
     val context = LocalContext.current
+    // Light vibrations (follow Settings > Haptic feedback)
+    val haptic = rememberHaptic()
     val trashRetention = remember { loadTrashRetention(context) }
     val trashDays = trashRetention.days
     // Taken once when the page opens: "days left" does not need to change while it is on screen
@@ -145,6 +147,7 @@ internal fun TrashScreen(
                         now = now,
                         retentionMs = trashRetention.millis,
                         onRestore = {
+                            haptic(HapticKind.CONFIRM)
                             ApplicationScope.scope.launch { repository.restore(note.id) }
                         },
                         onDeleteForever = { pendingDeleteId = note.id }
@@ -164,6 +167,7 @@ internal fun TrashScreen(
                 TextButton(
                     onClick = {
                         pendingDeleteId = null
+                        haptic(HapticKind.CONFIRM)
                         ApplicationScope.scope.launch { repository.deletePermanently(deleteId) }
                     }
                 ) {
@@ -189,6 +193,7 @@ internal fun TrashScreen(
                 TextButton(
                     onClick = {
                         confirmEmpty = false
+                        haptic(HapticKind.CONFIRM)
                         ApplicationScope.scope.launch { repository.emptyTrash() }
                     }
                 ) {
