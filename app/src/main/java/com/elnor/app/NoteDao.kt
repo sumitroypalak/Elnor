@@ -112,6 +112,17 @@ interface NoteDao {
     @Query("UPDATE notes SET archivedAt = NULL WHERE id IN (:ids)")
     suspend fun unarchiveMany(ids: List<Long>)
 
+    /** Takes notes out of the Trash. Title, body and updatedAt were never changed. */
+    @Query("UPDATE notes SET deletedAt = NULL WHERE id IN (:ids)")
+    suspend fun restoreMany(ids: List<Long>)
+
+    /**
+     * Gives a note the pin it had before it went to the Trash (the Trash takes the pin off). Used
+     * by "Undo" after a delete. A note that was pinned again meanwhile keeps its newer pin.
+     */
+    @Query("UPDATE notes SET pinnedAt = :pinnedAt WHERE id = :id AND deletedAt IS NULL AND pinnedAt IS NULL")
+    suspend fun restorePin(id: Long, pinnedAt: Long)
+
     /** Removes the row for good. Only the Trash screen uses this. */
     @Query("DELETE FROM notes WHERE id = :id")
     suspend fun deleteById(id: Long)

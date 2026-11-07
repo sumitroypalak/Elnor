@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -194,75 +193,4 @@ private fun NoteOverflowMenu(
             }
         }
     }
-}
-
-/** "Delete N notes?" for the selection on the home screen. Same Trash rule as [DeleteNoteDialog]. */
-@Composable
-internal fun DeleteNotesDialog(
-    count: Int,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    // The time chosen in Settings > Trash (30 days if never changed)
-    val context = LocalContext.current
-    val trashDays = remember { loadTrashRetention(context).days }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(if (count == 1) "Delete note?" else "Delete $count notes?", fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Text(
-                (if (count == 1) "This note" else "These notes") +
-                    " will be moved to Trash. You can restore " +
-                    (if (count == 1) "it" else "them") +
-                    " within $trashDays days. After that " +
-                    (if (count == 1) "it is" else "they are") + " deleted for good."
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("Delete", color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-/**
- * "Delete note?" The note goes to the Trash, where it can be restored, so this is the same
- * question in the editor and in the notes list.
- */
-@Composable
-internal fun DeleteNoteDialog(
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    // The time chosen in Settings > Trash (30 days if never changed)
-    val context = LocalContext.current
-    val trashDays = remember { loadTrashRetention(context).days }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete note?", fontWeight = FontWeight.Bold) },
-        text = {
-            Text(
-                "This note will be moved to Trash. You can restore it within " +
-                    "$trashDays days. After that it is deleted for good."
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("Delete", color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
 }

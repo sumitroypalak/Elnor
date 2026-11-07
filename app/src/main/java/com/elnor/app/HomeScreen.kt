@@ -81,8 +81,6 @@ fun ElnorApp(
     val archivedNotes by repository.archivedNotes.collectAsState<List<Note>, List<Note>?>(initial = null)
     val everyNote = remember(notes, archivedNotes) { notes + (archivedNotes ?: emptyList()) }
     val editingNote = everyNote.firstOrNull { it.id == editingNoteId }
-    // The note whose "Delete" was chosen in its three-dot menu (by id, never by list position)
-    var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val bgColor = MaterialTheme.colorScheme.background
     // The four pastel colours of the cards in the light theme. With the wallpaper colours (dynamic
@@ -167,8 +165,16 @@ fun ElnorApp(
         stateSaver = listSaver<Set<Long>, Long>(save = { it.toList() }, restore = { it.toSet() })
     ) { mutableStateOf<Set<Long>>(emptySet()) }
     val selectionMode = selectedIds.isNotEmpty()
-    var confirmDeleteSelected by rememberSaveable { mutableStateOf(false) }
     val uiScope = rememberCoroutineScope()
+
+    // Delete has no question: the notes go to the Trash at once and the message "moved to Trash"
+    // offers Undo (see DeleteUndo.kt). [notes] are taken before the delete, so Undo can give them
+    // back exactly as they were (also pinned).
+    fun deleteNotes(notes: List<Note>) {
+        if (notes.isEmpty()) return
+        haptic(HapticKind.CONFIRM) // once, also for many notes
+        deleteNotesWithUndo(uiScope, snackbarHostState, repository, notes)
+    }
 
     // A selected note that is gone (deleted somewhere else) is not selected any more. Only checked
     // when the notes are really loaded, so a selection restored after rotation is not lost.
@@ -228,7 +234,11 @@ fun ElnorApp(
             EditorScreen(
                 note = editingNote,
                 viewModel = editorViewModel,
-                onClose = { editorOpen = false }
+                onClose = { editorOpen = false },
+                // The editor already moved the note to the Trash. The list shows the message.
+                onNoteDeleted = { deleted ->
+                    uiScope.launch { showDeleteUndo(snackbarHostState, repository, listOf(deleted)) }
+                }
             )
         }
         BackHandler(enabled = leaving) { }
@@ -294,7 +304,12 @@ fun ElnorApp(
                                 archiveNotes(pinTargets.map { it.id })
                             }
                         },
-                        onDelete = { confirmDeleteSelected = true },
+                        onDelete = {
+                            // The notes as they are now (with their pin), then the selection ends
+                            val targets = selectedNotes
+                            selectedIds = emptySet()
+                            deleteNotes(targets)
+                        },
                         onSelectAll = {
                             haptic(HapticKind.TICK)
                             selectedIds = shownNotes.mapTo(HashSet()) { it.id }
@@ -649,7 +664,7 @@ fun ElnorApp(
                                     val deleteAction = NoteMenuAction(
                                         label = "Delete",
                                         isDestructive = true,
-                                        onClick = { pendingDeleteId = note.id }
+                                        onClick = { deleteNotes(listOf(note)) }
                                     )
                                     if (note.archivedAt != null) {
                                         // An archived note (a search result) goes back to the list
@@ -731,33 +746,6 @@ fun ElnorApp(
             }
         }
 
-        if (confirmDeleteSelected && selectionMode) {
-            DeleteNotesDialog(
-                count = selectedIds.size,
-                onConfirm = {
-                    val ids = selectedIds.toList()
-                    haptic(HapticKind.CONFIRM)
-                    confirmDeleteSelected = false
-                    selectedIds = emptySet()
-                    ApplicationScope.scope.launch { repository.moveToTrashMany(ids) }
-                },
-                onDismiss = { confirmDeleteSelected = false }
-            )
-        }
-
-        val deleteId = pendingDeleteId
-        if (deleteId != null) {
-            DeleteNoteDialog(
-                onConfirm = {
-                    pendingDeleteId = null
-                    haptic(HapticKind.CONFIRM)
-                    // The same deletion as in the editor: the note goes to the Trash. The list
-                    // follows the repository, so it updates by itself.
-                    ApplicationScope.scope.launch { repository.moveToTrash(deleteId) }
-                },
-                onDismiss = { pendingDeleteId = null }
-            )
-        }
     }
     } // end of AnimatedContent (list / editor)
 }

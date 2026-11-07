@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 // ----------------------------- Archive screen ------------------------------
@@ -53,6 +54,10 @@ internal fun ArchiveScreen(
     var query by rememberSaveable { mutableStateOf("") }
     // The note that is open in the editor (by id). Kept when the screen is recreated.
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The "moved to Trash" message with Undo. The host and the scope are here, above the animation,
+    // so the message survives the editor sliding out after a delete in the editor.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val uiScope = rememberCoroutineScope()
 
     // The editor rises a little and fades in over the list, and fades away when it closes
     AnimatedContent(
@@ -74,7 +79,9 @@ internal fun ArchiveScreen(
             onQueryChange = { query = it },
             onOpenNote = { editingId = it },
             onCloseEditor = { editingId = null },
-            onBack = onBack
+            onBack = onBack,
+            snackbarHostState = snackbarHostState,
+            uiScope = uiScope
         )
     }
 }
@@ -91,10 +98,11 @@ private fun ArchiveContent(
     onQueryChange: (String) -> Unit,
     onOpenNote: (Long) -> Unit,
     onCloseEditor: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    snackbarHostState: SnackbarHostState,
+    uiScope: CoroutineScope
 ) {
     val bgColor = MaterialTheme.colorScheme.background
-    var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     if (openId != null) {
         val editing = notes?.firstOrNull { it.id == openId }
@@ -118,7 +126,13 @@ private fun ArchiveContent(
                 EditorScreen(
                     note = editing,
                     viewModel = editorViewModel,
-                    onClose = onCloseEditor
+                    onClose = onCloseEditor,
+                    // The editor already moved the note to the Trash. The list shows the message.
+                    onNoteDeleted = { deleted ->
+                        uiScope.launch {
+                            showDeleteUndo(snackbarHostState, repository, listOf(deleted))
+                        }
+                    }
                 )
                 // Registered after the editor, so it is asked first: while the page slides out,
                 // Back must not save and close it a second time
@@ -135,6 +149,7 @@ private fun ArchiveContent(
 
     Scaffold(
         containerColor = bgColor,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Archive", fontWeight = FontWeight.Bold) },
@@ -227,23 +242,15 @@ private fun ArchiveContent(
                                     repository.unarchiveMany(listOf(note.id))
                                 }
                             },
-                            onDelete = { pendingDeleteId = note.id }
+                            // No question: to the Trash at once, with Undo
+                            onDelete = {
+                                deleteNotesWithUndo(uiScope, snackbarHostState, repository, listOf(note))
+                            }
                         )
                     }
                 }
             }
         }
-    }
-
-    val deleteId = pendingDeleteId
-    if (deleteId != null) {
-        DeleteNoteDialog(
-            onConfirm = {
-                pendingDeleteId = null
-                ApplicationScope.scope.launch { repository.moveToTrashMany(listOf(deleteId)) }
-            },
-            onDismiss = { pendingDeleteId = null }
-        )
     }
 }
 

@@ -369,9 +369,14 @@ class NoteEditorViewModel(
         }
     }
 
-    /** The user chose "Delete note". Moves the note to the Trash if it was saved, and ends the session. */
-    fun deleteNote() {
-        val current = session ?: return
+    /**
+     * The user chose "Delete note". Moves the note to the Trash if it was saved, and ends the session.
+     * Returns the id of the note that goes to the Trash, so the screen can offer "Undo", or null
+     * when there was nothing to delete (no page open, or the note was never saved).
+     */
+    fun deleteNote(): Long? {
+        val current = session ?: return null
+        val deletedId = current.id
         session = null
         _saveFailed.value = false
         cancelAutoSave() // a waiting pause-save must not bring the note back
@@ -379,6 +384,7 @@ class NoteEditorViewModel(
         savedState.remove<Long>(KEY_DRAFT_NOTE_ID)
         clearHistory()
         commands.trySend(Command.Delete(current))
+        return deletedId
     }
 
     override fun onCleared() {

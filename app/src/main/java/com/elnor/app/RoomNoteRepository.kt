@@ -120,6 +120,16 @@ class RoomNoteRepository(
         dao.restore(id)
     }
 
+    // Same pieces as the other "many" actions. Every pinned note gets back the exact pin time it
+    // had, so after Undo the list is in the same order as before the delete.
+    override suspend fun restoreNotes(notes: List<Note>) {
+        for (chunk in notes.map { it.id }.distinct().chunked(BATCH_SIZE)) dao.restoreMany(chunk)
+        for (note in notes) {
+            val pinnedAt = note.pinnedAt ?: continue
+            dao.restorePin(note.id, pinnedAt)
+        }
+    }
+
     override suspend fun deletePermanently(id: Long) {
         dao.deleteById(id)
     }

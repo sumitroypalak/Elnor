@@ -106,6 +106,17 @@ interface NoteRepository {
     /** Takes the note out of the Trash, exactly as it was. Does nothing if it is not there. */
     suspend fun restore(id: Long)
 
+    /**
+     * "Undo" after a delete. [notes] are the notes as they were BEFORE they went to the Trash. They
+     * come back out of the Trash, and a note that was pinned is pinned again (the Trash takes the
+     * pin off). Only the id and [Note.pinnedAt] of each entry are used.
+     */
+    suspend fun restoreNotes(notes: List<Note>) {
+        for (note in notes) restore(note.id)
+        val pinned = notes.filter { it.pinnedAt != null }.map { it.id }
+        if (pinned.isNotEmpty()) setPinnedMany(pinned, true)
+    }
+
     /** Removes the note for good. Only for notes that the user deletes from the Trash. */
     suspend fun deletePermanently(id: Long)
 
