@@ -24,7 +24,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
 // ----------------------------- Trash screen --------------------------------
@@ -105,8 +104,6 @@ internal fun TrashScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text("\uD83D\uDDD1\uFE0F", fontSize = 54.sp, lineHeight = 76.sp)
-                Spacer(Modifier.height(14.dp))
                 Text(
                     "Trash is empty",
                     style = MaterialTheme.typography.titleLarge,
