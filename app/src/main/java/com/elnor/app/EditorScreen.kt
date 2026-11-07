@@ -49,7 +49,13 @@ import kotlinx.coroutines.withContext
 fun EditorScreen(
     note: Note?,
     viewModel: NoteEditorViewModel,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    /**
+     * Called right after the note was deleted and the page was closed. The screen that is shown
+     * next uses it to offer "Undo". It gets the note as it was before the delete (only the id and
+     * the pin are filled in for certain).
+     */
+    onNoteDeleted: (Note) -> Unit = {}
 ) {
     val bgColor = MaterialTheme.colorScheme.background
     val noteKey = note?.id ?: -1L
@@ -60,7 +66,6 @@ fun EditorScreen(
         // cursor starts at the end of the existing text
         mutableStateOf(TextFieldValue(text, TextRange(text.length)))
     }
-    var confirmDelete by remember { mutableStateOf(false) }
     var confirmLeaveUnsaved by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val bodyFocus = remember { FocusRequester() }
@@ -224,6 +229,27 @@ fun EditorScreen(
         onClose()
     }
 
+    // Delete button: no question. The note goes to the Trash, the page closes, and the next screen
+    // shows "Note moved to Trash" with Undo.
+    fun deleteAndClose() {
+        haptic(HapticKind.CONFIRM)
+        val deletedId = viewModel.deleteNote()
+        onClose()
+        if (deletedId != null) {
+            onNoteDeleted(
+                Note(
+                    id = deletedId,
+                    title = title.trim(),
+                    body = bodyValue.text.trim(),
+                    updatedAt = System.currentTimeMillis(),
+                    // The editor has no Pin button, so these are the same as when the page opened
+                    pinnedAt = note?.pinnedAt,
+                    archivedAt = note?.archivedAt
+                )
+            )
+        }
+    }
+
     BackHandler { saveAndClose() }
     // Registered after the one above, so it wins: Back closes the Find bar first
     BackHandler(enabled = findOpen) { closeFind() }
@@ -342,7 +368,7 @@ fun EditorScreen(
                         }
                     }
                     if (canDelete) {
-                        IconButton(onClick = { confirmDelete = true }) {
+                        IconButton(onClick = { deleteAndClose() }) {
                             Icon(
                                 Icons.Default.Delete,
                                 contentDescription = "Delete note",
@@ -566,18 +592,6 @@ fun EditorScreen(
                     Text("Keep editing")
                 }
             }
-        )
-    }
-
-    if (confirmDelete) {
-        DeleteNoteDialog(
-            onConfirm = {
-                confirmDelete = false
-                haptic(HapticKind.CONFIRM)
-                viewModel.deleteNote()
-                onClose()
-            },
-            onDismiss = { confirmDelete = false }
         )
     }
 }
