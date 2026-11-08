@@ -63,6 +63,7 @@ fun TasksScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .centeredMaxWidth(ReadingMaxWidth)
             .padding(padding)
             .padding(horizontal = 20.dp)
     ) {

@@ -394,20 +394,26 @@ fun ElnorApp(
                         )
                     }
                 } else {
+                // The size of the window: follows rotation, split screen and foldables
+                val windowClass = rememberWindowClass()
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(bgColor)
+                        .centeredMaxWidth(HomeMaxWidth)
                         .padding(padding)
                         .padding(horizontal = 20.dp)
                 ) {
-                    Text(
-                        "Your thoughts, beautifully organized.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
-                    )
+                    // A phone held sideways has little height: the tagline makes room for notes
+                    if (!windowClass.compactHeight) {
+                        Text(
+                            "Your thoughts, beautifully organized.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+                        )
 
-                    Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(12.dp))
+                    }
 
                     // A soft surface with a thin, low-contrast border. When the field is focused,
                     // the border and the icons turn to the accent colour.
@@ -723,9 +729,10 @@ fun ElnorApp(
                                 }
                             }
                         } else {
-                            // Two columns. Every card is as tall as its text, so they fit together.
+                            // Two columns on a phone, more on wider windows. Every card is as tall as its text,
+                            // so they fit together.
                             LazyVerticalStaggeredGrid(
-                                columns = StaggeredGridCells.Fixed(2),
+                                columns = StaggeredGridCells.Fixed(gridColumnCount(windowClass.widthDp)),
                                 state = gridState,
                                 modifier = Modifier.fillMaxSize(),
                                 verticalItemSpacing = 13.dp,

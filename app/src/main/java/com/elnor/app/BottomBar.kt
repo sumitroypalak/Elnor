@@ -123,7 +123,7 @@ internal fun ElnorBottomBar(
 
     Row(
         modifier = Modifier
-            .fillMaxWidth()
+            .limitedWidth(BottomBarMaxWidth)
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)

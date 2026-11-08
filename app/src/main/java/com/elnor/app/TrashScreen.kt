@@ -121,6 +121,7 @@ internal fun TrashScreen(
             else -> LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
+                    .centeredMaxWidth(ReadingMaxWidth)
                     .padding(padding),
                 contentPadding = PaddingValues(
                     start = 20.dp,

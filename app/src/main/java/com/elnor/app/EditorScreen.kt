@@ -424,6 +424,7 @@ fun EditorScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .centeredMaxWidth(ReadingMaxWidth) // a comfortable line length on a tablet
                 .padding(padding)
                 .consumeWindowInsets(padding)
                 .imePadding() // keeps the text above the keyboard
