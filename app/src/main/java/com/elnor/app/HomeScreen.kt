@@ -79,6 +79,9 @@ fun ElnorApp(
     // Wide window: the list stays on the left and the editor opens on the right
     val windowClass = rememberWindowClass()
     val twoPane = isTwoPane(windowClass)
+    // Medium and expanded windows: the tabs and "+" are a rail on the left, not the bottom bar
+    val showRail = showsNavigationRail(windowClass)
+    val railWidthDp = if (showRail) NavigationRailWidth.value.toInt() else 0
     // Counts every opened page, so each note (or new note) gets a fresh editor
     var editorSession by rememberSaveable { mutableStateOf(0) }
     // An archived note can be opened too (it is a search result), so the editor looks in both
@@ -228,6 +231,23 @@ fun ElnorApp(
         editorOpen = true
     }
 
+    // The tabs and the round "+" button, used by the bottom bar and by the rail
+    fun selectHomeTab(tab: HomeTab) {
+        if (tab != homeTab) haptic(HapticKind.TICK)
+        homeTab = tab
+    }
+
+    fun onNewNoteClick() {
+        haptic(HapticKind.TICK)
+        if (homeTab == HomeTab.TASK) {
+            // On the Task tab the "+" button adds a task, not a note
+            newTaskOpen = true
+        } else {
+            homeTab = HomeTab.NOTE
+            openNote(null)
+        }
+    }
+
     // Two-pane: the note that is open can disappear from the list (deleted there). Its page
     // is then closed, and the right side shows "Select a note" again.
     LaunchedEffect(twoPane, editorOpen, editingNoteId, everyNote, notesLoaded, archivedNotes) {
@@ -370,23 +390,11 @@ fun ElnorApp(
                 // The bottom bar floats over the list, in the place of the old "New note" button
                 floatingActionButton = {
                     // No "new note" button while notes are selected
-                    if (!selectionMode) ElnorBottomBar(
+                    if (!selectionMode && !showRail) ElnorBottomBar(
                         selected = homeTab,
                         dark = dark,
-                        onSelect = {
-                            if (it != homeTab) haptic(HapticKind.TICK)
-                            homeTab = it
-                        },
-                        onNewNote = {
-                            haptic(HapticKind.TICK)
-                            if (homeTab == HomeTab.TASK) {
-                                // On the Task tab the "+" button adds a task, not a note
-                                newTaskOpen = true
-                            } else {
-                                homeTab = HomeTab.NOTE
-                                openNote(null)
-                            }
-                        }
+                        onSelect = { selectHomeTab(it) },
+                        onNewNote = { onNewNoteClick() }
                     )
                 },
                 floatingActionButtonPosition = FabPosition.Center
@@ -740,7 +748,7 @@ fun ElnorApp(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(13.dp),
-                                contentPadding = PaddingValues(bottom = 100.dp)
+                                contentPadding = PaddingValues(bottom = if (showRail) 24.dp else 100.dp)
                             ) {
                                 items(shownNotes, key = { it.id }) { note ->
                                     noteItem(note, Modifier.animateItem())
@@ -753,14 +761,15 @@ fun ElnorApp(
                                 columns = StaggeredGridCells.Fixed(
                                     // In two-pane the list is only TwoPaneListWidth wide
                                     gridColumnCount(
-                                        if (twoPane) TwoPaneListWidth.value.toInt() else windowClass.widthDp
+                                        if (twoPane) TwoPaneListWidth.value.toInt()
+                                        else windowClass.widthDp - railWidthDp
                                     )
                                 ),
                                 state = gridState,
                                 modifier = Modifier.fillMaxSize(),
                                 verticalItemSpacing = 13.dp,
                                 horizontalArrangement = Arrangement.spacedBy(13.dp),
-                                contentPadding = PaddingValues(bottom = 100.dp)
+                                contentPadding = PaddingValues(bottom = if (showRail) 24.dp else 100.dp)
                             ) {
                                 items(shownNotes, key = { it.id }) { note ->
                                     noteItem(note, Modifier.animateItem())
@@ -778,41 +787,65 @@ fun ElnorApp(
 
     }
 
-    if (twoPane) {
-        Row(Modifier.fillMaxSize().background(bgColor)) {
-            Box(Modifier.width(TwoPaneListWidth).fillMaxHeight()) { listPane() }
-            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            Box(Modifier.weight(1f).fillMaxHeight().background(bgColor)) {
-                if (editorOpen) {
+    Row(Modifier.fillMaxSize().background(bgColor)) {
+        if (showRail) {
+            ElnorNavigationRail(
+                selected = homeTab,
+                dark = dark,
+                onSelect = { selectHomeTab(it) },
+                onNewNote = { onNewNoteClick() }
+            )
+        }
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                // The rail already keeps clear of a bar on the left edge
+                .then(
+                    if (showRail) {
+                        Modifier.consumeWindowInsets(
+                            WindowInsets.systemBars.only(WindowInsetsSides.Start)
+                        )
+                    } else Modifier
+                )
+        ) {
+        if (twoPane) {
+            Row(Modifier.fillMaxSize().background(bgColor)) {
+                Box(Modifier.width(TwoPaneListWidth).fillMaxHeight()) { listPane() }
+                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                Box(Modifier.weight(1f).fillMaxHeight().background(bgColor)) {
+                    if (editorOpen) {
+                        editorPane()
+                    } else {
+                        HomeTabPlaceholder(
+                            title = "Select a note",
+                            subtitle = "Or tap + to write a new one.",
+                            padding = PaddingValues()
+                        )
+                    }
+                }
+            }
+        } else {
+            // The editor page rises a little and fades in over the list; when it closes it fades away
+            // and the list shows through. The page colour behind keeps the two from showing through
+            // each other.
+            AnimatedContent(
+                targetState = editorOpen,
+                modifier = Modifier.fillMaxSize().background(bgColor),
+                transitionSpec = { Motion.page(opening = targetState) },
+                label = "homeEditor"
+            ) { showEditor ->
+                // A page that is already sliding out must not answer Back again (the editor would save
+                // and close twice). Registered after the page below, so it is asked first.
+                val leaving = transition.targetState == EnterExitState.PostExit
+                if (showEditor) {
                     editorPane()
+                    BackHandler(enabled = leaving) { }
                 } else {
-                    HomeTabPlaceholder(
-                        title = "Select a note",
-                        subtitle = "Or tap + to write a new one.",
-                        padding = PaddingValues()
-                    )
+                    listPane()
                 }
             }
         }
-    } else {
-        // The editor page rises a little and fades in over the list; when it closes it fades away
-        // and the list shows through. The page colour behind keeps the two from showing through
-        // each other.
-        AnimatedContent(
-            targetState = editorOpen,
-            modifier = Modifier.fillMaxSize().background(bgColor),
-            transitionSpec = { Motion.page(opening = targetState) },
-            label = "homeEditor"
-        ) { showEditor ->
-            // A page that is already sliding out must not answer Back again (the editor would save
-            // and close twice). Registered after the page below, so it is asked first.
-            val leaving = transition.targetState == EnterExitState.PostExit
-            if (showEditor) {
-                editorPane()
-                BackHandler(enabled = leaving) { }
-            } else {
-                listPane()
-            }
         }
     }
 }

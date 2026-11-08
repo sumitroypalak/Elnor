@@ -77,4 +77,12 @@ class AdaptiveTest {
     fun listPaneGridHasTwoColumns() {
         assertEquals(2, gridColumnCount(TwoPaneListWidth.value.toInt()))
     }
+
+    @Test
+    fun railReplacesTheBottomBarOnWiderWindows() {
+        assertFalse(showsNavigationRail(WindowClass(widthDp = 360, heightDp = 800))) // phone portrait
+        assertTrue(showsNavigationRail(WindowClass(widthDp = 700, heightDp = 900)))  // small tablet / fold
+        assertTrue(showsNavigationRail(WindowClass(widthDp = 1280, heightDp = 800))) // tablet
+        assertTrue(showsNavigationRail(WindowClass(widthDp = 915, heightDp = 412)))  // phone sideways
+    }
 }

@@ -65,6 +65,15 @@ val TwoPaneListWidth: Dp = 360.dp
 fun isTwoPane(window: WindowClass): Boolean =
     window.width == WidthClass.EXPANDED && !window.compactHeight
 
+/** Width of the navigation rail (Material's own size). */
+val NavigationRailWidth: Dp = 80.dp
+
+/**
+ * Tabs on the left edge (a rail) instead of the floating bottom bar: every window that is not
+ * a phone in portrait. A phone held sideways gets it too, which saves its little height.
+ */
+fun showsNavigationRail(window: WindowClass): Boolean = window.width != WidthClass.COMPACT
+
 /** The floating bottom bar (tabs and "+") on big screens. */
 val BottomBarMaxWidth: Dp = 520.dp
 
