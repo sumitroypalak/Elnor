@@ -76,6 +76,11 @@ fun ElnorApp(
     // The "new task" dialog of the Task tab (opened by the round "+" button of the bottom bar)
     var newTaskOpen by rememberSaveable { mutableStateOf(false) }
     var editingNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Wide window: the list stays on the left and the editor opens on the right
+    val windowClass = rememberWindowClass()
+    val twoPane = isTwoPane(windowClass)
+    // Counts every opened page, so each note (or new note) gets a fresh editor
+    var editorSession by rememberSaveable { mutableStateOf(0) }
     // An archived note can be opened too (it is a search result), so the editor looks in both
     // lists. null until the Archive is read, so such a note is not mistaken for a new one.
     val archivedNotes by repository.archivedNotes.collectAsState<List<Note>, List<Note>?>(initial = null)
@@ -211,19 +216,33 @@ fun ElnorApp(
         }
     }
 
-    // The editor page rises a little and fades in over the list; when it closes it fades away
-    // and the list shows through. The page colour behind keeps the two from showing through
-    // each other.
-    AnimatedContent(
-        targetState = editorOpen,
-        modifier = Modifier.fillMaxSize().background(bgColor),
-        transitionSpec = { Motion.page(opening = targetState) },
-        label = "homeEditor"
-    ) { showEditor ->
-    // A page that is already sliding out must not answer Back again (the editor would save and
-    // close twice). Registered after the page below, so it is asked first.
-    val leaving = transition.targetState == EnterExitState.PostExit
-    if (showEditor) {
+    // Opens a note (or a new note for null). With the editor already open (two-pane), the note
+    // that is open is saved and closed first, so the next one can start.
+    fun openNote(id: Long?) {
+        if (editorOpen) {
+            if (id != null && id == editingNoteId) return // already open
+            editorViewModel.onBack()
+        }
+        editorSession++
+        editingNoteId = id
+        editorOpen = true
+    }
+
+    // Two-pane: the note that is open can disappear from the list (deleted there). Its page
+    // is then closed, and the right side shows "Select a note" again.
+    LaunchedEffect(twoPane, editorOpen, editingNoteId, everyNote, notesLoaded, archivedNotes) {
+        val id = editingNoteId
+        if (twoPane && editorOpen && id != null && notesLoaded && archivedNotes != null &&
+            everyNote.none { it.id == id }
+        ) {
+            editorViewModel.onBack()
+            editorOpen = false
+        }
+    }
+
+    // The editor: the page of one note (or a new note)
+    val editorPane: @Composable () -> Unit = {
+        key(editorSession) {
         if (editingNoteId != null && (!notesLoaded || (editingNote == null && archivedNotes == null))) {
             // The page came back after the app was closed: wait for the notes, so the note that
             // was open is found and not mistaken for a new one
@@ -241,8 +260,11 @@ fun ElnorApp(
                 }
             )
         }
-        BackHandler(enabled = leaving) { }
-    } else {
+        }
+    }
+
+    // The note list with its bars, tabs and side menu
+    val listPane: @Composable () -> Unit = {
         val drawerState = rememberDrawerState(DrawerValue.Closed)
         val drawerScope = rememberCoroutineScope()
         // Back from Task or Collection returns to Notes (registered first, so the menu below wins)
@@ -362,8 +384,7 @@ fun ElnorApp(
                                 newTaskOpen = true
                             } else {
                                 homeTab = HomeTab.NOTE
-                                editingNoteId = null
-                                editorOpen = true
+                                openNote(null)
                             }
                         }
                     )
@@ -394,9 +415,7 @@ fun ElnorApp(
                         )
                     }
                 } else {
-                // The size of the window: follows rotation, split screen and foldables
-                val windowClass = rememberWindowClass()
-                Column(
+                                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(bgColor)
@@ -649,8 +668,7 @@ fun ElnorApp(
                                     } else {
                                         // Opening a result shows the search was useful: remember it
                                         commitSearch(search)
-                                        editingNoteId = note.id
-                                        editorOpen = true
+                                        openNote(note.id)
                                     }
                                 },
                                 // Touch and hold: start selecting (or select one more note)
@@ -732,7 +750,12 @@ fun ElnorApp(
                             // Two columns on a phone, more on wider windows. Every card is as tall as its text,
                             // so they fit together.
                             LazyVerticalStaggeredGrid(
-                                columns = StaggeredGridCells.Fixed(gridColumnCount(windowClass.widthDp)),
+                                columns = StaggeredGridCells.Fixed(
+                                    // In two-pane the list is only TwoPaneListWidth wide
+                                    gridColumnCount(
+                                        if (twoPane) TwoPaneListWidth.value.toInt() else windowClass.widthDp
+                                    )
+                                ),
                                 state = gridState,
                                 modifier = Modifier.fillMaxSize(),
                                 verticalItemSpacing = 13.dp,
@@ -754,5 +777,42 @@ fun ElnorApp(
         }
 
     }
-    } // end of AnimatedContent (list / editor)
+
+    if (twoPane) {
+        Row(Modifier.fillMaxSize().background(bgColor)) {
+            Box(Modifier.width(TwoPaneListWidth).fillMaxHeight()) { listPane() }
+            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            Box(Modifier.weight(1f).fillMaxHeight().background(bgColor)) {
+                if (editorOpen) {
+                    editorPane()
+                } else {
+                    HomeTabPlaceholder(
+                        title = "Select a note",
+                        subtitle = "Or tap + to write a new one.",
+                        padding = PaddingValues()
+                    )
+                }
+            }
+        }
+    } else {
+        // The editor page rises a little and fades in over the list; when it closes it fades away
+        // and the list shows through. The page colour behind keeps the two from showing through
+        // each other.
+        AnimatedContent(
+            targetState = editorOpen,
+            modifier = Modifier.fillMaxSize().background(bgColor),
+            transitionSpec = { Motion.page(opening = targetState) },
+            label = "homeEditor"
+        ) { showEditor ->
+            // A page that is already sliding out must not answer Back again (the editor would save
+            // and close twice). Registered after the page below, so it is asked first.
+            val leaving = transition.targetState == EnterExitState.PostExit
+            if (showEditor) {
+                editorPane()
+                BackHandler(enabled = leaving) { }
+            } else {
+                listPane()
+            }
+        }
+    }
 }

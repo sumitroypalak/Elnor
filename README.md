@@ -5,6 +5,7 @@ A simple Android note-taking app.
 Features
 
 - Create notes
+- Big screens: on a tablet or an open foldable the notes list stays on the left and the note opens on the right (tap a note to switch, the one that was open is saved first). The notes grid has more columns on wide windows, and the text screens keep a comfortable width. A phone held sideways keeps the one-page layout
 - Edit notes. The keyboard opens at once only for a new note; an existing note opens without the keyboard, so it can be read in peace. Tap the text to start typing
 - Undo and Redo buttons at the top of the note page (a word at a time)
 - "Last edited" date and time under the title of a note

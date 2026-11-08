@@ -59,4 +59,22 @@ class AdaptiveTest {
         assertEquals(2, gridColumnCount(100))
         assertEquals(2, gridColumnCount(0))
     }
+
+    @Test
+    fun tabletUsesTwoPanes() {
+        assertTrue(isTwoPane(WindowClass(widthDp = 1280, heightDp = 800)))
+        assertTrue(isTwoPane(WindowClass(widthDp = 840, heightDp = 600)))
+    }
+
+    @Test
+    fun phonesAndNarrowWindowsKeepOnePage() {
+        assertFalse(isTwoPane(WindowClass(widthDp = 360, heightDp = 800))) // phone portrait
+        assertFalse(isTwoPane(WindowClass(widthDp = 700, heightDp = 900))) // small tablet / fold
+        assertFalse(isTwoPane(WindowClass(widthDp = 915, heightDp = 412))) // big phone sideways
+    }
+
+    @Test
+    fun listPaneGridHasTwoColumns() {
+        assertEquals(2, gridColumnCount(TwoPaneListWidth.value.toInt()))
+    }
 }

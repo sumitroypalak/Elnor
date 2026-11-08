@@ -55,6 +55,16 @@ val HomeMaxWidth: Dp = 840.dp
 /** Text screens (editor, settings, tasks, trash) stay this wide: easy line length to read. */
 val ReadingMaxWidth: Dp = 720.dp
 
+/** The note list when it sits left of the editor (two-pane layout). */
+val TwoPaneListWidth: Dp = 360.dp
+
+/**
+ * Note list and editor side by side: a wide window (tablet, open fold, big window) that is also
+ * tall enough. A phone held sideways is wide but short, so it keeps the one-page layout.
+ */
+fun isTwoPane(window: WindowClass): Boolean =
+    window.width == WidthClass.EXPANDED && !window.compactHeight
+
 /** The floating bottom bar (tabs and "+") on big screens. */
 val BottomBarMaxWidth: Dp = 520.dp
 
