@@ -410,7 +410,7 @@ fun ElnorApp(
                     Spacer(Modifier.height(12.dp))
 
                     // A soft surface with a thin, low-contrast border. When the field is focused,
-                    // the border and the icons turn to the purple accent.
+                    // the border and the icons turn to the accent colour.
                     val onSurface = MaterialTheme.colorScheme.onSurface
                     val searchColors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = onSurface,

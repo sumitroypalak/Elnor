@@ -78,6 +78,7 @@ internal fun ElnorBottomBar(
     val highlight = if (dark) scheme.primaryContainer else scheme.primary
     val onBar = when {
         dynamic -> if (dark) scheme.onSurface else scheme.inverseOnSurface
+        dark -> scheme.onSurface // the grey-white of the other text, not the old lavender
         else -> Color(0xFFE4E0FF)
     }
 
