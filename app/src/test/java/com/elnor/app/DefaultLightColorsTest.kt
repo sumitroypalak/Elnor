@@ -30,8 +30,8 @@ class DefaultLightColorsTest {
     }
 
     @Test
-    fun bottomBarPair_isDarkWithLightText() {
-        // The bar of the light theme is drawn with these two
+    fun messagePair_isDarkWithLightText() {
+        // The message at the bottom ("Note moved to Trash" with Undo) is drawn with these two
         assertEquals(Color(0xFF2F3036), light.inverseSurface)
         assertEquals(Color(0xFFF1F0F7), light.inverseOnSurface)
     }
