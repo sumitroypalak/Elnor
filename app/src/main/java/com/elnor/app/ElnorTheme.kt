@@ -46,15 +46,57 @@ internal fun saveThemeMode(context: Context, mode: ThemeMode) {
         .apply()
 }
 
+/**
+ * The dark theme: a blue, slightly cool grey look (Material 3 blue palette). The values marked
+ * "measured" were read from a screenshot of the app that the owner wants as the default look.
+ * The others are the matching steps of the same palette, so no colour is left to the Material
+ * default, which is purple and would show up in dialogs, menus and the date picker.
+ *
+ * "surface" is the colour of cards, the search field and the bottom bar. It is one step lighter
+ * than the page ("background"), the same way the wallpaper colours are arranged (see
+ * [wallpaperColorScheme]), so the cards stand out without a shadow.
+ */
+private fun elnorDarkColorScheme(): ColorScheme = darkColorScheme(
+    primary = Color(0xFFB0C6FF), // measured: "1 note", sort and grid icons
+    onPrimary = Color(0xFF002D6E),
+    primaryContainer = Color(0xFF00419C), // measured: the selected tab of the bottom bar
+    onPrimaryContainer = Color(0xFFD9E2FF),
+    inversePrimary = Color(0xFF0058CA), // the "Undo" of a message at the bottom
+    secondary = Color(0xFFC0C6DC),
+    onSecondary = Color(0xFF2A3042),
+    secondaryContainer = Color(0xFF404659), // measured: the menu button
+    onSecondaryContainer = Color(0xFFDCE2F9), // measured: the icon on the menu button
+    tertiary = Color(0xFFE2BBDB),
+    onTertiary = Color(0xFF43273F),
+    tertiaryContainer = Color(0xFF5B3D56),
+    onTertiaryContainer = Color(0xFFFFD7F8),
+    background = Color(0xFF121318), // measured: the page
+    onBackground = Color(0xFFE2E2E9), // measured: "Elnor", titles
+    surface = Color(0xFF1E1F25), // measured: cards, search field, bottom bar
+    onSurface = Color(0xFFE2E2E9), // measured
+    surfaceVariant = Color(0xFF44474F),
+    onSurfaceVariant = Color(0xFFC4C6D0),
+    surfaceTint = Color(0xFFB0C6FF),
+    inverseSurface = Color(0xFFE2E2E9),
+    inverseOnSurface = Color(0xFF2F3036),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+    outline = Color(0xFF8E9099),
+    outlineVariant = Color(0xFF44474F),
+    surfaceDim = Color(0xFF121318),
+    surfaceBright = Color(0xFF38393F),
+    surfaceContainerLowest = Color(0xFF0C0E13),
+    surfaceContainerLow = Color(0xFF1A1B20),
+    surfaceContainer = Color(0xFF1E1F25),
+    surfaceContainerHigh = Color(0xFF282A2F),
+    surfaceContainerHighest = Color(0xFF33353A)
+)
+
 /** The only place where the app's light and dark colours are defined. */
 fun elnorColorScheme(dark: Boolean): ColorScheme = if (dark) {
-    darkColorScheme(
-        primary = Color(0xFFB9B5FF),
-        primaryContainer = Color(0xFF433AA8),
-        onPrimaryContainer = Color(0xFFE4E0FF),
-        background = Color(0xFF10111B),
-        surface = Color(0xFF1C1D2B)
-    )
+    elnorDarkColorScheme()
 } else {
     lightColorScheme(
         primary = Color(0xFF6257D9),
