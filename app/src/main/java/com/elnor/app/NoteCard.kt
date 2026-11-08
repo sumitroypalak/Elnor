@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 // ----------------------------- Note card -----------------------------------
 
@@ -107,7 +106,12 @@ fun NoteCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // A small mark on a pinned note
                     if (note.pinnedAt != null) {
-                        Text("\uD83D\uDCCC", fontSize = 12.sp)
+                        Icon(
+                            PinIcon,
+                            contentDescription = "Pinned",
+                            tint = if (dark) MaterialTheme.colorScheme.primary else Color(0xFF00419C),
+                            modifier = Modifier.size(14.dp)
+                        )
                         Spacer(Modifier.width(6.dp))
                     }
                     // Only shown where archived notes are mixed with the others (search results)
