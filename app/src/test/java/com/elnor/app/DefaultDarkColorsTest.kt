@@ -54,12 +54,4 @@ class DefaultDarkColorsTest {
             assertFalse("old colour still used: $color", color in oldPurple)
         }
     }
-
-    @Test
-    fun lightTheme_isNotChanged() {
-        val light = elnorColorScheme(dark = false)
-        assertEquals(Color(0xFFF5F5FC), light.background)
-        assertEquals(Color(0xFFFFFFFF), light.surface)
-        assertEquals(Color(0xFF6257D9), light.primary)
-    }
 }

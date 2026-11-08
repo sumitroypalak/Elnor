@@ -96,7 +96,7 @@ fun ElnorApp(
         )
     } else {
         listOf(
-            Color(0xFFE9E5FF),
+            Color(0xFFD9E2FF), // soft blue (was lavender)
             Color(0xFFDDF4F0),
             Color(0xFFFFEACD),
             Color(0xFFF9DFEA)

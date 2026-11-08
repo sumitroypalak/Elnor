@@ -94,18 +94,56 @@ private fun elnorDarkColorScheme(): ColorScheme = darkColorScheme(
     surfaceContainerHighest = Color(0xFF33353A)
 )
 
+/**
+ * The light theme: the same blue palette as [elnorDarkColorScheme], in its light steps. Unlike the
+ * dark theme, these values were NOT measured from a screenshot: they are the light counterparts of
+ * the measured dark colours (for example the light "secondaryContainer" #DCE2F9 is the "on" colour
+ * of the same container in the dark theme), so both themes belong together.
+ *
+ * Like before, the page ("background") is a soft tint and the cards ("surface") are white, so the
+ * cards stand out without a shadow.
+ */
+private fun elnorLightColorScheme(): ColorScheme = lightColorScheme(
+    primary = Color(0xFF0058CA),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFD9E2FF),
+    onPrimaryContainer = Color(0xFF001945),
+    inversePrimary = Color(0xFFB0C6FF), // the "Undo" of a message at the bottom
+    secondary = Color(0xFF575E71),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFDCE2F9),
+    onSecondaryContainer = Color(0xFF151B2C),
+    tertiary = Color(0xFF735470),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFFFD7F8),
+    onTertiaryContainer = Color(0xFF2B122A),
+    background = Color(0xFFF4F3FA), // the soft tint of the page
+    onBackground = Color(0xFF1A1B20),
+    surface = Color(0xFFFFFFFF), // cards, search field
+    onSurface = Color(0xFF1A1B20),
+    surfaceVariant = Color(0xFFE1E2EC),
+    onSurfaceVariant = Color(0xFF44474F),
+    surfaceTint = Color(0xFF0058CA),
+    inverseSurface = Color(0xFF2F3036), // the dark bottom bar and the message at the bottom
+    inverseOnSurface = Color(0xFFF1F0F7),
+    error = Color(0xFFBA1A1A),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
+    outline = Color(0xFF757780),
+    outlineVariant = Color(0xFFC4C6D0),
+    surfaceDim = Color(0xFFDAD9E0),
+    surfaceBright = Color(0xFFFAF8FF),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF4F3FA),
+    surfaceContainer = Color(0xFFEEEDF4),
+    surfaceContainerHigh = Color(0xFFE8E7EE),
+    surfaceContainerHighest = Color(0xFFE2E2E9)
+)
+
 /** The only place where the app's light and dark colours are defined. */
-fun elnorColorScheme(dark: Boolean): ColorScheme = if (dark) {
-    elnorDarkColorScheme()
-} else {
-    lightColorScheme(
-        primary = Color(0xFF6257D9),
-        primaryContainer = Color(0xFFE4E0FF),
-        onPrimaryContainer = Color(0xFF1B1464),
-        background = Color(0xFFF5F5FC),
-        surface = Color(0xFFFFFFFF)
-    )
-}
+fun elnorColorScheme(dark: Boolean): ColorScheme =
+    if (dark) elnorDarkColorScheme() else elnorLightColorScheme()
 
 /**
  * The colours the app really uses: the colours of the wallpaper when [dynamic] is on and this phone
