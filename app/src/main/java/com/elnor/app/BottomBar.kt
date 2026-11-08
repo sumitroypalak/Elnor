@@ -2,9 +2,11 @@
 
 package com.elnor.app
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -53,10 +55,39 @@ internal enum class HomeTab(val label: String, val icon: ImageVector) {
 private val BottomBarSpring = spring<Float>(dampingRatio = 0.9f, stiffness = 800f)
 
 /**
- * A dark pill with the three tabs and, next to it, a separate round "New note" button.
+ * The colours of the bottom bar. Every colour comes from the theme (with or without the wallpaper
+ * colours), and each one is paired with the colour of what is drawn on it, so the icons and names
+ * stay clear in both themes:
+ *  - the bar and the tabs on it: the card colour with the normal text colour (white bar in the
+ *    light theme, dark bar in the dark theme)
+ *  - the highlight of the selected tab: a strong blue (the light theme) or the deep blue container
+ *    (the dark theme), with its own text colour
+ *  - the "New note" button: the accent colour, so the main action stands out in both themes
+ */
+internal data class BottomBarColors(
+    val bar: Color,
+    val onBar: Color,
+    val highlight: Color,
+    val onHighlight: Color,
+    val newNote: Color,
+    val onNewNote: Color
+)
+
+internal fun bottomBarColors(scheme: ColorScheme, dark: Boolean) = BottomBarColors(
+    bar = scheme.surface,
+    onBar = scheme.onSurface,
+    highlight = if (dark) scheme.primaryContainer else scheme.primary,
+    onHighlight = if (dark) scheme.onSurface else scheme.onPrimary,
+    newNote = scheme.primary,
+    onNewNote = scheme.onPrimary
+)
+
+/**
+ * A pill with the three tabs and, next to it, a separate round "New note" button.
  * One highlight slides to the selected tab. Only the selected tab shows its icon, so all three
  * names fit on a small phone.
- * Both parts are dark in the light and in the dark theme.
+ * The pill follows the theme (white in the light theme, dark in the dark theme, see
+ * [bottomBarColors]). The "New note" button is in the accent colour in both.
  */
 @Composable
 internal fun ElnorBottomBar(
@@ -65,13 +96,8 @@ internal fun ElnorBottomBar(
     onSelect: (HomeTab) -> Unit,
     onNewNote: () -> Unit
 ) {
-    // The bar takes its colours from the theme, with or without the wallpaper colours. The pairs are
-    // made to be read together (inverse surface with its text), so the icons and names stay clear:
-    // light theme = dark bar, dark theme = the card colour.
     val scheme = MaterialTheme.colorScheme
-    val barColor = if (dark) scheme.surface else scheme.inverseSurface
-    val highlight = if (dark) scheme.primaryContainer else scheme.primary
-    val onBar = if (dark) scheme.onSurface else scheme.inverseOnSurface
+    val colors = bottomBarColors(scheme, dark)
 
     // 1 for the selected tab, 0 for the others. They are read only while measuring and drawing,
     // so the bar does not recompose on every frame of the animation.
@@ -105,12 +131,14 @@ internal fun ElnorBottomBar(
         Surface(
             modifier = Modifier.weight(1f),
             shape = CircleShape,
-            color = barColor,
-            shadowElevation = 6.dp
+            color = colors.bar,
+            shadowElevation = 6.dp,
+            // A white bar on the light page needs a thin edge besides the shadow
+            border = if (dark) null else BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.6f))
         ) {
             SlidingTabRow(
                 progress = progress,
-                highlight = highlight,
+                highlight = colors.highlight,
                 modifier = Modifier
                     .padding(6.dp)
                     .selectableGroup()
@@ -120,7 +148,8 @@ internal fun ElnorBottomBar(
                         tab = tab,
                         selected = tab == selected,
                         progress = progress[index],
-                        onBar = onBar,
+                        onBar = colors.onBar,
+                        onHighlight = colors.onHighlight,
                         onClick = { onSelect(tab) }
                     )
                 }
@@ -136,12 +165,12 @@ internal fun ElnorBottomBar(
                     scaleY = newNoteScale.value
                 },
             shape = CircleShape,
-            color = barColor,
+            color = colors.newNote,
             shadowElevation = 6.dp,
             interactionSource = newNoteSource
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Add, contentDescription = "New note", tint = onBar)
+                Icon(Icons.Default.Add, contentDescription = "New note", tint = colors.onNewNote)
             }
         }
     }
@@ -219,6 +248,8 @@ private fun SlidingTabRow(
 /**
  * One tab. While it is being selected, the space for its icon opens up, the icon slides in from
  * the left and fades in, and the label gets brighter. All of it follows [progress].
+ * The selected tab sits on the highlight, so its icon and name use [onHighlight]; the others sit on
+ * the bar and use [onBar]. The change of colour is animated, so it goes along with the highlight.
  */
 @Composable
 private fun BottomBarTab(
@@ -226,8 +257,14 @@ private fun BottomBarTab(
     selected: Boolean,
     progress: State<Float>,
     onBar: Color,
+    onHighlight: Color,
     onClick: () -> Unit
 ) {
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) onHighlight else onBar,
+        animationSpec = Motion.short(),
+        label = "tabContentColor"
+    )
     Row(
         modifier = Modifier
             .height(44.dp)
@@ -250,7 +287,7 @@ private fun BottomBarTab(
             Icon(
                 tab.icon,
                 contentDescription = null,
-                tint = onBar,
+                tint = contentColor,
                 modifier = Modifier
                     .padding(end = 6.dp)
                     .size(20.dp)
@@ -267,7 +304,7 @@ private fun BottomBarTab(
             tab.label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Medium,
-            color = onBar,
+            color = contentColor,
             maxLines = 1,
             modifier = Modifier.graphicsLayer {
                 alpha = 0.72f + 0.28f * progress.value.coerceIn(0f, 1f)
