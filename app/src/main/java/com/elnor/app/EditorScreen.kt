@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Delete
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // ----------------------------- Editor screen -------------------------------
@@ -229,7 +231,7 @@ fun EditorScreen(
         onClose()
     }
 
-    // Delete button: no question. The note goes to the Trash, the page closes, and the next screen
+    // Delete: no question. The note goes to the Trash, the page closes, and the next screen
     // shows "Note moved to Trash" with Undo.
     fun deleteAndClose() {
         haptic(HapticKind.CONFIRM)
@@ -242,11 +244,26 @@ fun EditorScreen(
                     title = title.trim(),
                     body = bodyValue.text.trim(),
                     updatedAt = System.currentTimeMillis(),
-                    // The editor has no Pin button, so these are the same as when the page opened
+                    // [note] is kept up to date by the list, so this is the pin of this moment
+                    // (also after the Pin button of this page was used)
                     pinnedAt = note?.pinnedAt,
                     archivedAt = note?.archivedAt
                 )
             )
+        }
+    }
+
+    // Pin / Unpin in the top bar. Only for a note that is already in the list (a brand new note
+    // gets the button when it is opened again) and not for an archived one (it cannot be pinned).
+    // The pin is read from [note], which the list keeps up to date, so the icon changes by itself.
+    val pinned = note?.pinnedAt != null
+    val canPin = note != null && note.archivedAt == null
+    fun togglePin() {
+        val current = note ?: return
+        haptic(HapticKind.CONFIRM)
+        val repository = RoomNoteRepository.get(context.applicationContext)
+        ApplicationScope.scope.launch {
+            repository.setPinned(current.id, current.pinnedAt == null)
         }
     }
 
@@ -265,7 +282,7 @@ fun EditorScreen(
 
     // Save the note as a file: Android's "Save as" screen asks where. The text is taken when the
     // user has chosen the place, so the file has what is on the screen at that moment.
-    var shareMenuOpen by remember { mutableStateOf(false) }
+    var moreMenuOpen by remember { mutableStateOf(false) }
     val saveTxtLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(NoteExportFormat.TXT.mimeType)
     ) { uri ->
@@ -317,63 +334,82 @@ fun EditorScreen(
                             Icon(Icons.Default.Search, contentDescription = "Find in note")
                         }
                     }
-                    // Copy: the title and the text that are on the screen now (also if not saved yet)
-                    val copyText = noteTextForCopy(title, bodyValue.text)
-                    if (copyText.isNotEmpty()) {
-                        IconButton(onClick = { copyTextToClipboard(context, copyText) }) {
-                            Icon(CopyIcon, contentDescription = "Copy note text")
+                    // Pin: a solid blue pin when the note is pinned, a line pin when it is not
+                    if (canPin) {
+                        IconButton(onClick = { togglePin() }) {
+                            Icon(
+                                if (pinned) PinIcon else PinOutlineIcon,
+                                contentDescription = if (pinned) "Unpin note" else "Pin note",
+                                tint = if (pinned) MaterialTheme.colorScheme.primary
+                                else LocalContentColor.current
+                            )
                         }
-                        // Share and save: one button (the bar has no room for one more), with a
-                        // small menu: share the text, or save the note as a .txt or .md file
+                    }
+                    // The title and the text that are on the screen now (also if not saved yet)
+                    val copyText = noteTextForCopy(title, bodyValue.text)
+                    // One three-dot menu: Copy, Share, Save as a file, and Delete
+                    if (copyText.isNotEmpty() || canDelete) {
                         Box {
-                            IconButton(onClick = { shareMenuOpen = true }) {
-                                Icon(Icons.Default.Share, contentDescription = "Share or save note")
+                            IconButton(onClick = { moreMenuOpen = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More options")
                             }
                             DropdownMenu(
-                                expanded = shareMenuOpen,
-                                onDismissRequest = { shareMenuOpen = false }
+                                expanded = moreMenuOpen,
+                                onDismissRequest = { moreMenuOpen = false }
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("Share") },
-                                    onClick = {
-                                        shareMenuOpen = false
-                                        AppLock.expectExternalScreen() // the Share sheet is not "leaving" Elnor
-                                        shareNote(context, title, bodyValue.text)
-                                    }
-                                )
-                                for (format in NoteExportFormat.entries) {
+                                if (copyText.isNotEmpty()) {
                                     DropdownMenuItem(
-                                        text = { Text(format.label) },
+                                        text = { Text("Copy text") },
                                         onClick = {
-                                            shareMenuOpen = false
-                                            AppLock.expectExternalScreen() // the "Save as" screen is not "leaving" Elnor
-                                            val name = NoteExport.fileName(title, bodyValue.text, format)
-                                            val launched = runCatching {
-                                                when (format) {
-                                                    NoteExportFormat.TXT -> saveTxtLauncher.launch(name)
-                                                    NoteExportFormat.MD -> saveMdLauncher.launch(name)
+                                            moreMenuOpen = false
+                                            copyTextToClipboard(context, copyText)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Share") },
+                                        onClick = {
+                                            moreMenuOpen = false
+                                            AppLock.expectExternalScreen() // the Share sheet is not "leaving" Elnor
+                                            shareNote(context, title, bodyValue.text)
+                                        }
+                                    )
+                                    for (format in NoteExportFormat.entries) {
+                                        DropdownMenuItem(
+                                            text = { Text(format.label) },
+                                            onClick = {
+                                                moreMenuOpen = false
+                                                AppLock.expectExternalScreen() // the "Save as" screen is not "leaving" Elnor
+                                                val name = NoteExport.fileName(title, bodyValue.text, format)
+                                                val launched = runCatching {
+                                                    when (format) {
+                                                        NoteExportFormat.TXT -> saveTxtLauncher.launch(name)
+                                                        NoteExportFormat.MD -> saveMdLauncher.launch(name)
+                                                    }
+                                                }.isSuccess
+                                                if (!launched) {
+                                                    Toast.makeText(
+                                                        context.applicationContext,
+                                                        "Could not open the Save screen",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
                                                 }
-                                            }.isSuccess
-                                            if (!launched) {
-                                                Toast.makeText(
-                                                    context.applicationContext,
-                                                    "Could not open the Save screen",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
                                             }
+                                        )
+                                    }
+                                }
+                                if (copyText.isNotEmpty() && canDelete) HorizontalDivider()
+                                if (canDelete) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text("Delete", color = MaterialTheme.colorScheme.error)
+                                        },
+                                        onClick = {
+                                            moreMenuOpen = false
+                                            deleteAndClose()
                                         }
                                     )
                                 }
                             }
-                        }
-                    }
-                    if (canDelete) {
-                        IconButton(onClick = { deleteAndClose() }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete note",
-                                tint = MaterialTheme.colorScheme.error
-                            )
                         }
                     }
                 },

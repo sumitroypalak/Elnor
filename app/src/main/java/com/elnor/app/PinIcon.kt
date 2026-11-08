@@ -10,9 +10,14 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
 /** Pinned-note mark: a solid push pin, tilted 45°. Tinted by Icon(), same on every phone. */
-val PinIcon: ImageVector by lazy {
+val PinIcon: ImageVector by lazy { pinIcon(name = "Pin", filled = true) }
+
+/** The same pin as a line drawing: the "Pin" button of a note that is not pinned. */
+val PinOutlineIcon: ImageVector by lazy { pinIcon(name = "PinOutline", filled = false) }
+
+private fun pinIcon(name: String, filled: Boolean): ImageVector =
     ImageVector.Builder(
-        name = "Pin",
+        name = name,
         defaultWidth = 24.dp,
         defaultHeight = 24.dp,
         viewportWidth = 24f,
@@ -20,7 +25,7 @@ val PinIcon: ImageVector by lazy {
     ).apply {
         group(rotate = 45f, pivotX = 12f, pivotY = 12f) {
             path(
-                fill = SolidColor(Color.Black),
+                fill = if (filled) SolidColor(Color.Black) else null,
                 stroke = SolidColor(Color.Black),
                 strokeLineWidth = 2f,
                 strokeLineCap = StrokeCap.Round,
@@ -40,4 +45,3 @@ val PinIcon: ImageVector by lazy {
             }
         }
     }.build()
-}
