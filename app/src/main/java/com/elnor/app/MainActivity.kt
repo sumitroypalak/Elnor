@@ -191,6 +191,9 @@ fun ElnorRoot(
     onUnlockClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    // The size of the window, worked out once here and given to every screen below
+    // (LocalWindowClass). It follows rotation, split screen, window resize and foldables.
+    val windowClass = rememberWindowClass()
     // Changes by itself when the phone switches between light and dark
     val systemDark = isSystemInDarkTheme()
     var themeMode by remember { mutableStateOf(initialThemeMode) }
@@ -216,6 +219,7 @@ fun ElnorRoot(
         if (locked) focusManager.clearFocus(force = true)
     }
 
+    CompositionLocalProvider(LocalWindowClass provides windowClass) {
     ElnorTheme(darkTheme = darkTheme, fontScale = fontSize.scale, dynamicColor = dynamicColor) {
         Box(Modifier.fillMaxSize()) {
             // The screens stay composed while locked (an open note is still there after unlocking),
@@ -339,5 +343,6 @@ fun ElnorRoot(
                 LockedScreen(onUnlock = onUnlockClick)
             }
         }
+    }
     }
 }

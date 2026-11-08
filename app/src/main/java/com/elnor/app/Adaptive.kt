@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -41,11 +42,19 @@ data class WindowClass(val widthDp: Int, val heightDp: Int) {
     val compactHeight: Boolean get() = height == HeightClass.COMPACT
 }
 
+/** Reads the size of the window from the activity's configuration. */
 @Composable
 fun rememberWindowClass(): WindowClass {
     val configuration = LocalConfiguration.current
     return WindowClass(configuration.screenWidthDp, configuration.screenHeightDp)
 }
+
+/**
+ * The size of the window, worked out once in ElnorRoot ([rememberWindowClass]) and handed to every
+ * screen below it. A screen reads it with `LocalWindowClass.current`. The value before a root
+ * provides one is a normal phone in portrait, so a preview or a test still draws something sensible.
+ */
+val LocalWindowClass = compositionLocalOf { WindowClass(widthDp = 360, heightDp = 800) }
 
 // ------------------------- Widths -------------------------
 

@@ -77,7 +77,7 @@ fun ElnorApp(
     var newTaskOpen by rememberSaveable { mutableStateOf(false) }
     var editingNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
     // Wide window: the list stays on the left and the editor opens on the right
-    val windowClass = rememberWindowClass()
+    val windowClass = LocalWindowClass.current
     val twoPane = isTwoPane(windowClass)
     // Medium and expanded windows: the tabs and "+" are a rail on the left, not the bottom bar
     val showRail = showsNavigationRail(windowClass)
