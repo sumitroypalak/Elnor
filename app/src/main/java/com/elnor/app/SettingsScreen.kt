@@ -577,7 +577,7 @@ private fun FontSizeDialog(
                         Spacer(Modifier.width(16.dp))
                         val factor = choice.scale / current.scale
                         Text(
-                            "${choice.label()} · আমার নোট",
+                            "${choice.label()} · My note",
                             style = base.copy(
                                 fontSize = base.fontSize * factor,
                                 lineHeight = base.lineHeight * factor
