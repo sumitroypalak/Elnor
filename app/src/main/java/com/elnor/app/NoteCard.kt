@@ -116,7 +116,7 @@ fun NoteCard(
                             "Archived",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (dark) MaterialTheme.colorScheme.primary else Color(0xFF4B3FA0)
+                            color = if (dark) MaterialTheme.colorScheme.primary else Color(0xFF00419C)
                         )
                         Spacer(Modifier.width(8.dp))
                     }
