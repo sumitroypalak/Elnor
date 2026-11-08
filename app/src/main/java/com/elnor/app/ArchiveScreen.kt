@@ -168,6 +168,7 @@ private fun ArchiveContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .centeredMaxWidth(ReadingMaxWidth)
                 .padding(padding)
         ) {
             // The search box is only useful when there is something to search

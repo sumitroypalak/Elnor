@@ -35,14 +35,16 @@ fun FormatToolbar(
     onHeading: () -> Unit,
     onBullet: () -> Unit,
     onNumbered: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** A phone held sideways: less space above and below the pill. */
+    compact: Boolean = false
 ) {
     val scheme = MaterialTheme.colorScheme
     val dark = scheme.surface.luminance() < 0.5f
     val colors = bottomBarColors(scheme, dark)
 
     Surface(
-        modifier = modifier.padding(vertical = 6.dp),
+        modifier = modifier.padding(vertical = if (compact) 2.dp else 6.dp),
         shape = CircleShape,
         color = colors.bar,
         shadowElevation = 6.dp,

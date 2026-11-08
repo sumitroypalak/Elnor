@@ -102,6 +102,7 @@ fun AppLockScreen(onBack: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .centeredMaxWidth(ReadingMaxWidth)
                 .padding(padding)
         ) {
             HorizontalDivider(color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f))

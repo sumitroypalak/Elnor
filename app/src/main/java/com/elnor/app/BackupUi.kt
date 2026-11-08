@@ -155,6 +155,7 @@ fun BackupScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
+                .centeredMaxWidth(ReadingMaxWidth)
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             if (busy) {

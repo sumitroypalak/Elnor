@@ -62,6 +62,8 @@ fun EditorScreen(
     onNoteDeleted: (Note) -> Unit = {}
 ) {
     val bgColor = MaterialTheme.colorScheme.background
+    // A phone held sideways has very little height: the bars above and below the text get smaller
+    val compactHeight = LocalWindowClass.current.compactHeight
     val noteKey = note?.id ?: -1L
 
     var title by rememberSaveable(noteKey) { mutableStateOf(note?.title ?: "") }
@@ -303,6 +305,8 @@ fun EditorScreen(
         topBar = {
             TopAppBar(
                 title = {},
+                // Normal height is 64.dp; a phone held sideways gives the text more room
+                expandedHeight = if (compactHeight) 48.dp else 64.dp,
                 navigationIcon = {
                     IconButton(onClick = { saveAndClose() }) {
                         Icon(
@@ -579,6 +583,7 @@ fun EditorScreen(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
                     FormatToolbar(
+                        compact = compactHeight,
                         onBold = { applyFormat(MarkdownFormat::toggleBold) },
                         onHeading = { applyFormat(MarkdownFormat::cycleHeading) },
                         onBullet = { applyFormat(MarkdownFormat::toggleBullet) },
@@ -608,11 +613,24 @@ fun EditorScreen(
                             }
                         }
                     }
+                    // A phone held sideways: the count shares the row of the buttons, so the
+                    // text keeps one more line
+                    if (compactHeight) {
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            formatNoteStats(stats),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = 8.dp, end = 4.dp)
+                        )
+                    }
                 }
             }
 
-            // Word and character count, just above the keyboard
-            Text(
+            // Word and character count, just above the keyboard (in the row of the buttons
+            // instead, while they are shown on a phone held sideways)
+            if (!(compactHeight && bodyFocused)) Text(
                 formatNoteStats(stats),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
