@@ -15,6 +15,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
@@ -34,6 +35,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -417,6 +419,8 @@ fun EditorScreen(
             )
         }
     ) { padding ->
+        val dark = bgColor.luminance() < 0.5f
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -447,79 +451,103 @@ fun EditorScreen(
                 )
             }
 
-            // Title (optional)
-            TextField(
-                value = title,
-                onValueChange = {
-                    title = it
-                    viewModel.onTitleChange(it) // saved after a typing pause
-                },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.headlineSmall.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-                placeholder = {
-                    Text(
-                        "Title",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
-                    )
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                keyboardActions = KeyboardActions(
-                    onNext = { bodyFocus.requestFocus() }
-                ),
-                colors = fieldColors
-            )
-
-            // When the note was last saved (nothing for a note that was never saved)
-            if (lastEdited != null) {
-                Text(
-                    lastEdited,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                )
-            }
-
-            // Body: fills the rest of the screen
-            TextField(
-                value = bodyValue,
-                onValueChange = {
-                    // Enter inside a list starts the next item (or ends the list on an empty item)
-                    val listEdit = if (it.selection.collapsed) {
-                        MarkdownFormat.afterNewline(bodyValue.text, it.text, it.selection.start)
-                    } else {
-                        null
-                    }
-                    val next = if (listEdit != null) {
-                        TextFieldValue(listEdit.text, TextRange(listEdit.selStart, listEdit.selEnd))
-                    } else {
-                        it
-                    }
-                    bodyValue = next
-                    viewModel.onBodyChange(next.text, next.selection.start, next.selection.end) // saved after a typing pause
-                },
+            // The title and the text sit on one rounded card, in the same shape as the note cards
+            // of the home screen. It fills the rest of the screen.
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .focusRequester(bodyFocus)
-                    .onFocusChanged { bodyFocused = it.isFocused },
-                visualTransformation = textStyling,
-                textStyle = MaterialTheme.typography.bodyLarge,
-                placeholder = {
-                    Text(
-                        "Start writing...",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                    .padding(top = 4.dp),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.surface,
+                // A white card on the light page needs a thin edge (the dark card does not)
+                border = if (dark) null else BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 8.dp)
+                ) {
+                    // Title (optional)
+                    TextField(
+                        value = title,
+                        onValueChange = {
+                            title = it
+                            viewModel.onTitleChange(it) // saved after a typing pause
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        placeholder = {
+                            Text(
+                                "Title",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                            )
+                        },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(
+                            onNext = { bodyFocus.requestFocus() }
+                        ),
+                        colors = fieldColors
                     )
-                },
-                colors = fieldColors
-            )
+
+                    // When the note was last saved (nothing for a note that was never saved)
+                    if (lastEdited != null) {
+                        Text(
+                            lastEdited,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        )
+                    }
+
+                    // Body: fills the rest of the card
+                    TextField(
+                        value = bodyValue,
+                        onValueChange = {
+                            // Enter inside a list starts the next item (or ends the list on an empty item)
+                            val listEdit = if (it.selection.collapsed) {
+                                MarkdownFormat.afterNewline(bodyValue.text, it.text, it.selection.start)
+                            } else {
+                                null
+                            }
+                            val next = if (listEdit != null) {
+                                TextFieldValue(listEdit.text, TextRange(listEdit.selStart, listEdit.selEnd))
+                            } else {
+                                it
+                            }
+                            bodyValue = next
+                            viewModel.onBodyChange(next.text, next.selection.start, next.selection.end) // saved after a typing pause
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .focusRequester(bodyFocus)
+                            .onFocusChanged { bodyFocused = it.isFocused },
+                        visualTransformation = textStyling,
+                        textStyle = MaterialTheme.typography.bodyLarge,
+                        placeholder = {
+                            Text(
+                                "Start writing...",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                            )
+                        },
+                        colors = fieldColors
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
 
             // Stays on the screen as long as the last save has not worked
             if (saveFailed) {
@@ -604,7 +632,7 @@ fun EditorScreen(
             text = {
                 Text(
                     "Elnor could not save this note. If you leave now, your latest changes " +
-                        "may be lost. Use the copy button to keep the text first."
+                        "may be lost. Use Copy text in the menu to keep the text first."
                 )
             },
             confirmButton = {
