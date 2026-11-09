@@ -788,23 +788,15 @@ fun ElnorApp(
     }
 
     Row(Modifier.fillMaxSize().background(bgColor)) {
-        if (showRail) {
-            ElnorNavigationRail(
-                selected = homeTab,
-                dark = dark,
-                onSelect = { selectHomeTab(it) },
-                onNewNote = { onNewNoteClick() }
-            )
-        }
         Box(
             Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                // The rail already keeps clear of a bar on the left edge
+                // The rail is on the right edge and already keeps clear of a bar there
                 .then(
                     if (showRail) {
                         Modifier.consumeWindowInsets(
-                            WindowInsets.systemBars.only(WindowInsetsSides.Start)
+                            WindowInsets.systemBars.only(WindowInsetsSides.End)
                         )
                     } else Modifier
                 )
@@ -846,6 +838,15 @@ fun ElnorApp(
                 }
             }
         }
+        }
+        // The tabs and the round "+" button are on the right edge
+        if (showRail) {
+            ElnorNavigationRail(
+                selected = homeTab,
+                dark = dark,
+                onSelect = { selectHomeTab(it) },
+                onNewNote = { onNewNoteClick() }
+            )
         }
     }
 }
