@@ -79,7 +79,7 @@ fun ElnorApp(
     // Wide window: the list stays on the left and the editor opens on the right
     val windowClass = LocalWindowClass.current
     val twoPane = isTwoPane(windowClass)
-    // Medium and expanded windows: the tabs and "+" are a rail on the left, not the bottom bar
+    // Tablet or open foldable: the tabs and "+" are a rail on the left, not the bottom bar
     val showRail = showsNavigationRail(windowClass)
     val railWidthDp = if (showRail) NavigationRailWidth.value.toInt() else 0
     // Counts every opened page, so each note (or new note) gets a fresh editor
@@ -788,15 +788,24 @@ fun ElnorApp(
     }
 
     Row(Modifier.fillMaxSize().background(bgColor)) {
+        // The tabs and the round "+" button are on the left edge, before the list and the editor
+        if (showRail) {
+            ElnorNavigationRail(
+                selected = homeTab,
+                dark = dark,
+                onSelect = { selectHomeTab(it) },
+                onNewNote = { onNewNoteClick() }
+            )
+        }
         Box(
             Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                // The rail is on the right edge and already keeps clear of a bar there
+                // The rail already keeps clear of a bar on the left edge
                 .then(
                     if (showRail) {
                         Modifier.consumeWindowInsets(
-                            WindowInsets.systemBars.only(WindowInsetsSides.End)
+                            WindowInsets.systemBars.only(WindowInsetsSides.Start)
                         )
                     } else Modifier
                 )
@@ -838,15 +847,6 @@ fun ElnorApp(
                 }
             }
         }
-        }
-        // The tabs and the round "+" button are on the right edge
-        if (showRail) {
-            ElnorNavigationRail(
-                selected = homeTab,
-                dark = dark,
-                onSelect = { selectHomeTab(it) },
-                onNewNote = { onNewNoteClick() }
-            )
         }
     }
 }

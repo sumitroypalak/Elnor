@@ -79,10 +79,19 @@ class AdaptiveTest {
     }
 
     @Test
-    fun railReplacesTheBottomBarOnWiderWindows() {
+    fun railIsOnlyForTabletsAndFoldables() {
         assertFalse(showsNavigationRail(WindowClass(widthDp = 360, heightDp = 800))) // phone portrait
-        assertTrue(showsNavigationRail(WindowClass(widthDp = 700, heightDp = 900)))  // small tablet / fold
+        assertFalse(showsNavigationRail(WindowClass(widthDp = 915, heightDp = 412))) // phone sideways
+        assertFalse(showsNavigationRail(WindowClass(widthDp = 700, heightDp = 900))) // small window
+        assertTrue(showsNavigationRail(WindowClass(widthDp = 841, heightDp = 701)))  // open foldable
         assertTrue(showsNavigationRail(WindowClass(widthDp = 1280, heightDp = 800))) // tablet
-        assertTrue(showsNavigationRail(WindowClass(widthDp = 915, heightDp = 412)))  // phone sideways
+    }
+
+    @Test
+    fun railAppearsTogetherWithTwoPanes() {
+        for ((w, h) in listOf(360 to 800, 915 to 412, 700 to 900, 841 to 701, 1280 to 800, 840 to 479)) {
+            val window = WindowClass(widthDp = w, heightDp = h)
+            assertEquals("$w x $h", isTwoPane(window), showsNavigationRail(window))
+        }
     }
 }

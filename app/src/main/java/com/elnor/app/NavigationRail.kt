@@ -1,10 +1,6 @@
 package com.elnor.app
 
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -20,8 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 /**
- * The tabs of the home screen on the right edge, for a window that is not a phone in portrait
- * (medium and expanded width, see [showsNavigationRail]). It takes the place of the floating
+ * The tabs of the home screen on the left edge, for a tablet or an open foldable
+ * (see [showsNavigationRail]). It takes the place of the floating
  * bottom bar: the round "+" button is at the top of the rail, the three tabs are under it.
  * It uses the same colours as the bottom bar ([bottomBarColors]), so both follow the theme.
  */
@@ -36,11 +32,6 @@ internal fun ElnorNavigationRail(
     val colors = bottomBarColors(MaterialTheme.colorScheme, dark)
     NavigationRail(
         modifier = modifier,
-        // Material's rail expects to be on the left: it keeps clear of the system bars on the
-        // left. Here it is on the right, so the right edge is the one that needs the space.
-        windowInsets = WindowInsets.systemBars.only(
-            WindowInsetsSides.Vertical + WindowInsetsSides.End
-        ),
         containerColor = MaterialTheme.colorScheme.background,
         contentColor = colors.onBar,
         header = {
