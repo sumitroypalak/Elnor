@@ -431,15 +431,10 @@ fun ElnorApp(
                         .padding(padding)
                         .padding(horizontal = 20.dp)
                 ) {
-                    // A phone held sideways has little height: the tagline makes room for notes
+                    // No tagline: the header is kept compact, so more notes fit on the screen. A phone
+                    // held sideways has little height, so it gets no gap under the bar at all.
                     if (!windowClass.compactHeight) {
-                        Text(
-                            "Your thoughts, beautifully organized.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
-                        )
-
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(4.dp))
                     }
 
                     // A soft surface with a thin, low-contrast border. When the field is focused,
@@ -530,7 +525,7 @@ fun ElnorApp(
                         }
                     }
 
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(12.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -605,7 +600,7 @@ fun ElnorApp(
                         }
                     }
 
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     // What fills the rest of the screen: the loading circle, the empty message or
                     // the notes. They fade into each other.
