@@ -1,10 +1,12 @@
 package com.elnor.app
 
+import androidx.compose.material3.SnackbarHostState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -96,6 +98,84 @@ class DeleteUndoTest {
 
         assertTrue(repo.restored.isEmpty())
         assertTrue(repo.pinCalls.isEmpty())
+    }
+
+    // ---- Deleting again while the message is still there ----
+    // Each test ends the message (Undo or dismiss), because runTest waits for every launched call.
+
+    @Test
+    fun twoDeletesInARow_shareOneMessage_andOneUndoRestoresBoth() = runTest {
+        val repo = FakeRepository()
+        val host = SnackbarHostState()
+
+        launch { showDeleteUndo(host, repo, listOf(note(1)), restoreScope = backgroundScope) }
+        runCurrent()
+        assertEquals("Note moved to Trash", host.currentSnackbarData?.visuals?.message)
+
+        launch { showDeleteUndo(host, repo, listOf(note(2)), restoreScope = backgroundScope) }
+        runCurrent()
+        assertEquals("2 notes moved to Trash", host.currentSnackbarData?.visuals?.message)
+
+        host.currentSnackbarData?.performAction()
+        runCurrent()
+
+        assertEquals(listOf(1L, 2L), repo.restored)
+    }
+
+    @Test
+    fun twoDeletesInARow_withoutUndo_restoreNothing() = runTest {
+        val repo = FakeRepository()
+        val host = SnackbarHostState()
+
+        launch { showDeleteUndo(host, repo, listOf(note(1)), restoreScope = backgroundScope) }
+        runCurrent()
+        launch { showDeleteUndo(host, repo, listOf(note(2)), restoreScope = backgroundScope) }
+        runCurrent()
+
+        host.currentSnackbarData?.dismiss()
+        runCurrent()
+
+        assertTrue(repo.restored.isEmpty())
+    }
+
+    @Test
+    fun undoOfAJoinedMessage_keepsThePinOfEveryNote() = runTest {
+        val repo = FakeRepository()
+        val host = SnackbarHostState()
+
+        launch { showDeleteUndo(host, repo, listOf(note(1, pinnedAt = 5L)), restoreScope = backgroundScope) }
+        runCurrent()
+        launch { showDeleteUndo(host, repo, listOf(note(2)), restoreScope = backgroundScope) }
+        runCurrent()
+
+        host.currentSnackbarData?.performAction()
+        runCurrent()
+
+        assertEquals(listOf(1L, 2L), repo.restored)
+        assertEquals(listOf(1L to true), repo.pinCalls)
+    }
+
+    @Test
+    fun aMessageOfAnotherKindInBetween_startsANewBatch() = runTest {
+        val repo = FakeRepository()
+        val host = SnackbarHostState()
+
+        launch { showDeleteUndo(host, repo, listOf(note(1)), restoreScope = backgroundScope) }
+        runCurrent()
+        // Another kind of message (for example "Note archived") replaces the delete message
+        host.currentSnackbarData?.dismiss()
+        launch { host.showSnackbar(message = "Note archived", actionLabel = "Undo") }
+        runCurrent()
+
+        launch { showDeleteUndo(host, repo, listOf(note(2)), restoreScope = backgroundScope) }
+        runCurrent()
+        // Note 1 lost its message to the other kind, so this one is a message of its own
+        assertEquals("Note moved to Trash", host.currentSnackbarData?.visuals?.message)
+
+        host.currentSnackbarData?.performAction()
+        runCurrent()
+
+        assertEquals(listOf(2L), repo.restored)
     }
 
     // ---- The editor tells which note it deleted ----

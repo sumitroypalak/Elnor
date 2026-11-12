@@ -30,6 +30,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -49,6 +53,51 @@ import java.io.IOException
 
 /** A backup file bigger than this is refused, so a wrong file cannot fill the memory. */
 private const val MAX_BACKUP_BYTES = 50L * 1024L * 1024L
+
+/**
+ * What a backup or restore is doing, and what it said at the end.
+ *
+ * The work runs in [ApplicationScope], so it goes on when the screen is recreated (for example by
+ * turning the phone). This state must outlive the screen too: if it lived in the screen, the new
+ * screen would think nothing is running (the buttons would work again and a second run could
+ * start), and the running work would write its result into a screen that no longer exists.
+ */
+internal object BackupState {
+    private val _busy = MutableStateFlow(false)
+    private val _message = MutableStateFlow<String?>(null)
+
+    /** True while a backup or a restore is running. */
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    /** The result of the last run (success or error text), or null. */
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    /**
+     * Marks a run as started. Returns false, and changes nothing, when one is already running,
+     * so two runs can never overlap.
+     */
+    fun tryStart(): Boolean {
+        if (!_busy.compareAndSet(expect = false, update = true)) return false
+        _message.value = null
+        return true
+    }
+
+    /** Ends the run that [tryStart] began and shows [result] (null: no message, e.g. cancelled). */
+    fun finish(result: String?) {
+        _message.value = result
+        _busy.value = false
+    }
+
+    /** A message that is not the result of a run (for example "There are no notes to back up yet."). */
+    fun showMessage(text: String) {
+        if (!_busy.value) _message.value = text
+    }
+
+    /** Forgets an old result when the screen is opened afresh. A run that is still going is kept. */
+    fun clearOldResult() {
+        if (!_busy.value) _message.value = null
+    }
+}
 
 /**
  * Backup and restore: save all notes into one file that the user places (Downloads, Google Drive,
@@ -66,9 +115,13 @@ fun BackupScreen(
     val context = LocalContext.current
     val bgColor = MaterialTheme.colorScheme.background
     val uiScope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    // rememberSaveable: the result stays on the screen after rotating the phone
-    var message by rememberSaveable { mutableStateOf<String?>(null) }
+    // An old result is forgotten only when the screen is opened afresh. The initializer of
+    // rememberSaveable runs once per opening (not again after rotation), and it comes before the
+    // collectors below, so an old result is never drawn for a moment.
+    rememberSaveable { BackupState.clearOldResult(); true }
+    // The state lives in BackupState, not here: see the comment there (it survives rotation)
+    val busy by BackupState.busy.collectAsState()
+    val message by BackupState.message.collectAsState()
 
     // The vibration for the result. The work runs off the main thread, so it only leaves the kind
     // here and the screen performs it. Not saved, so turning the phone does not vibrate again.
@@ -84,20 +137,22 @@ fun BackupScreen(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult // the user cancelled
-        busy = true
-        message = null
+        if (!BackupState.tryStart()) return@rememberLauncherForActivityResult // one is running
         ApplicationScope.scope.launch {
-            message = try {
-                val count = withContext(Dispatchers.IO) { writeBackup(context, repository, uri) }
-                resultHaptic = HapticKind.CONFIRM
-                BackupFormat.exportMessage(count)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                resultHaptic = HapticKind.REJECT
-                "The backup could not be saved. Please try another place."
+            var result: String? = null
+            try {
+                result = try {
+                    val count = withContext(Dispatchers.IO) { writeBackup(context, repository, uri) }
+                    resultHaptic = HapticKind.CONFIRM
+                    BackupFormat.exportMessage(count)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    resultHaptic = HapticKind.REJECT
+                    "The backup could not be saved. Please try another place."
+                }
             } finally {
-                busy = false
+                BackupState.finish(result)
             }
         }
     }
@@ -106,29 +161,31 @@ fun BackupScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        busy = true
-        message = null
+        if (!BackupState.tryStart()) return@rememberLauncherForActivityResult // one is running
         ApplicationScope.scope.launch {
-            message = try {
-                val text = withContext(Dispatchers.IO) { readBackup(context, uri) }
-                when (val parsed = BackupFormat.fromJson(text)) {
-                    is BackupParseResult.Failure -> {
-                        resultHaptic = HapticKind.REJECT
-                        parsed.reason.message
+            var result: String? = null
+            try {
+                result = try {
+                    val text = withContext(Dispatchers.IO) { readBackup(context, uri) }
+                    when (val parsed = BackupFormat.fromJson(text)) {
+                        is BackupParseResult.Failure -> {
+                            resultHaptic = HapticKind.REJECT
+                            parsed.reason.message
+                        }
+                        is BackupParseResult.Success -> {
+                            val summary = repository.importNotes(parsed.notes)
+                            resultHaptic = HapticKind.CONFIRM
+                            BackupFormat.importMessage(summary, parsed.skipped)
+                        }
                     }
-                    is BackupParseResult.Success -> {
-                        val summary = repository.importNotes(parsed.notes)
-                        resultHaptic = HapticKind.CONFIRM
-                        BackupFormat.importMessage(summary, parsed.skipped)
-                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    resultHaptic = HapticKind.REJECT
+                    "The file could not be read."
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                resultHaptic = HapticKind.REJECT
-                "The file could not be read."
             } finally {
-                busy = false
+                BackupState.finish(result)
             }
         }
     }
@@ -173,7 +230,7 @@ fun BackupScreen(
                     uiScope.launch {
                         // No empty backup files: there would be nothing to restore from them
                         if (repository.exportAll().isEmpty()) {
-                            message = "There are no notes to back up yet."
+                            BackupState.showMessage("There are no notes to back up yet.")
                         } else {
                             AppLock.expectExternalScreen() // the picker is not "leaving" Elnor
                             exportLauncher.launch(BackupFormat.fileName(System.currentTimeMillis()))
