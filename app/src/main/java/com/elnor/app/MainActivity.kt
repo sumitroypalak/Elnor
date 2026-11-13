@@ -3,6 +3,7 @@
 package com.elnor.app
 
 import android.app.Activity
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.WindowManager
@@ -101,6 +102,10 @@ class MainActivity : FragmentActivity() {
         // Notes that have been in the Trash for the chosen time (default 30 days, Settings > Trash)
         // are deleted for good when the app starts
         repository.purgeExpiredTrashInBackground()
+
+        // The launcher shortcut or the Quick Settings tile asked for a new note (see QuickNote)
+        handleQuickNoteIntent(intent, isRestored = savedInstanceState != null)
+
         setContent {
             ElnorRoot(
                 repository = repository,
@@ -109,6 +114,24 @@ class MainActivity : FragmentActivity() {
                 initialThemeMode = initialThemeMode,
                 onUnlockClick = { showUnlockPrompt(automatic = false) }
             )
+        }
+    }
+
+    /** Elnor was already open and was started again by the shortcut or the tile. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleQuickNoteIntent(intent, isRestored = false)
+    }
+
+    /**
+     * Turns a "new note" intent into a request. The home screen answers it (it also leaves
+     * Settings and the like first), so it works both from a cold start and while Elnor is open.
+     * The App lock is not skipped: the lock screen stays over everything until the user unlocks.
+     */
+    private fun handleQuickNoteIntent(intent: Intent?, isRestored: Boolean) {
+        if (QuickNote.shouldStartNewNote(intent?.action, isRestored)) {
+            QuickNote.requests.request()
         }
     }
 
@@ -210,6 +233,12 @@ fun ElnorRoot(
     var hapticEnabled by remember { mutableStateOf(HapticSettings.enabled) }
     val view = LocalView.current
     var screen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
+    // A "new note" request (launcher shortcut, Quick Settings tile) always goes to the home screen,
+    // from Settings, Trash and the others too. The home screen then opens the empty note.
+    val newNoteWaiting by QuickNote.requests.pending.collectAsState()
+    LaunchedEffect(newNoteWaiting) {
+        if (newNoteWaiting) screen = AppScreen.HOME
+    }
     val locked by AppLock.locked.collectAsState()
     val appLockEnabled by AppLock.enabled.collectAsState()
     val focusManager = LocalFocusManager.current

@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Elnor</string>
+
+    <!-- Launcher shortcut (touch and hold the app icon). The short label is shown under the icon. -->
+    <string name="shortcut_new_note_short">New note</string>
+    <string name="shortcut_new_note_long">Write a new note</string>
+
+    <!-- Quick Settings tile -->
+    <string name="tile_new_note">New note</string>
 </resources>

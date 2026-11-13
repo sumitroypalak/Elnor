@@ -24,7 +24,26 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Touch and hold the icon: "New note" (see QuickNote.kt) -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!--
+            The "New note" tile of the Quick Settings panel. The system binds to it, so it needs
+            the BIND_QUICK_SETTINGS_TILE permission: only the system can use it.
+        -->
+        <service
+            android:name=".NewNoteTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_new_note"
+            android:label="@string/tile_new_note"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <!--
             Text from other apps becomes a new note, with no screen of its own: "Share" > Elnor,
