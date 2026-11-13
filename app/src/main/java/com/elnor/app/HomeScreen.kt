@@ -248,6 +248,17 @@ fun ElnorApp(
         }
     }
 
+    // "New note" from the launcher shortcut or the Quick Settings tile (see QuickNote). Always a
+    // note, also when the Task tab was open. A note that is open is saved first (openNote does it).
+    val newNoteWaiting by QuickNote.requests.pending.collectAsState()
+    LaunchedEffect(newNoteWaiting) {
+        if (newNoteWaiting && QuickNote.requests.consume()) {
+            selectedIds = emptySet() // an action of the selection bar must not reach a closed page
+            homeTab = HomeTab.NOTE
+            openNote(null)
+        }
+    }
+
     // Two-pane: the note that is open can disappear from the list (deleted there). Its page
     // is then closed, and the right side shows "Select a note" again.
     LaunchedEffect(twoPane, editorOpen, editingNoteId, everyNote, notesLoaded, archivedNotes) {
