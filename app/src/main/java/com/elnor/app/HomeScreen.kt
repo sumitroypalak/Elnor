@@ -3,56 +3,28 @@
 package com.elnor.app
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.EnterExitState
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // ----------------------------- Notes screen --------------------------------
-
-/** What the notes screen shows below the "Your notes" line. */
-private enum class NotesPane { LOADING, EMPTY, NOTES }
+//
+// This file holds the state and the logic of the home screen. The parts that only draw are in their
+// own files: HomeTopBar.kt (top bar and the bar of the selection), HomeNotesTab.kt (search field,
+// "Your notes" line, list and grid), HomeNoteItem.kt (one note card and its menu) and
+// HomeLayout.kt (rail, one-page and two-pane layout).
 
 /** How long the user must stop typing in the search field before the search runs (milliseconds). */
 private const val SEARCH_DEBOUNCE_MS = 200L
@@ -131,7 +103,6 @@ fun ElnorApp(
     var viewMode by remember { mutableStateOf(loadNotesViewMode(context)) }
 
     // Recent searches: listed under the search field while it is focused and empty
-    val focusManager = LocalFocusManager.current
     var recentSearches by remember { mutableStateOf(loadRecentSearches(context)) }
     var searchFocused by remember { mutableStateOf(false) }
     // Saves a search the user really made (not every letter typed)
@@ -271,26 +242,67 @@ fun ElnorApp(
         }
     }
 
+    // One note card, used by the list and by the grid
+    val noteItem: @Composable (Note, Modifier) -> Unit = { note, itemModifier ->
+        NoteListItem(
+            note = note,
+            modifier = itemModifier,
+            dark = dark,
+            cardColors = cardColors,
+            selected = note.id in selectedIds,
+            // No three-dot menu while selecting: the bar at the top has the actions
+            menuActions = if (selectionMode) {
+                emptyList()
+            } else {
+                noteMenuActions(
+                    note = note,
+                    haptic = haptic,
+                    repository = repository,
+                    onArchive = { archiveNotes(listOf(note.id)) },
+                    onDelete = { deleteNotes(listOf(note)) }
+                )
+            },
+            onClick = {
+                if (selectionMode) {
+                    toggleSelected(note.id)
+                } else {
+                    // Opening a result shows the search was useful: remember it
+                    commitSearch(search)
+                    openNote(note.id)
+                }
+            },
+            // Touch and hold: start selecting (or select one more note)
+            onLongClick = {
+                if (selectionMode) {
+                    toggleSelected(note.id)
+                } else {
+                    haptic(HapticKind.LONG_PRESS) // the selection starts
+                    selectedIds = setOf(note.id)
+                }
+            }
+        )
+    }
+
     // The editor: the page of one note (or a new note)
     val editorPane: @Composable () -> Unit = {
         key(editorSession) {
-        if (editingNoteId != null && (!notesLoaded || (editingNote == null && archivedNotes == null))) {
-            // The page came back after the app was closed: wait for the notes, so the note that
-            // was open is found and not mistaken for a new one
-            Box(Modifier.fillMaxSize().background(bgColor), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            EditorScreen(
-                note = editingNote,
-                viewModel = editorViewModel,
-                onClose = { editorOpen = false },
-                // The editor already moved the note to the Trash. The list shows the message.
-                onNoteDeleted = { deleted ->
-                    uiScope.launch { showDeleteUndo(snackbarHostState, repository, listOf(deleted)) }
+            if (editingNoteId != null && (!notesLoaded || (editingNote == null && archivedNotes == null))) {
+                // The page came back after the app was closed: wait for the notes, so the note that
+                // was open is found and not mistaken for a new one
+                Box(Modifier.fillMaxSize().background(bgColor), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
                 }
-            )
-        }
+            } else {
+                EditorScreen(
+                    note = editingNote,
+                    viewModel = editorViewModel,
+                    onClose = { editorOpen = false },
+                    // The editor already moved the note to the Trash. The list shows the message.
+                    onNoteDeleted = { deleted ->
+                        uiScope.launch { showDeleteUndo(snackbarHostState, repository, listOf(deleted)) }
+                    }
+                )
+            }
         }
     }
 
@@ -317,86 +329,19 @@ fun ElnorApp(
                 containerColor = bgColor,
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
-                  // The normal bar and the bar of the selection fade into each other. The number of
-                  // selected notes is remembered, so the bar that is fading out does not show "0".
-                  val lastSelectedCount = remember { intArrayOf(0) }
-                  if (selectionMode) lastSelectedCount[0] = selectedIds.size
-                  Crossfade(
-                      targetState = selectionMode,
-                      animationSpec = Motion.short(),
-                      label = "topBar"
-                  ) { selecting ->
-                  if (selecting) {
-                    // The selected notes. An archived note (a search result) cannot be pinned, and
-                    // "Archive" does nothing for it, so those actions only look at the other notes.
-                    val selectedNotes = everyNote.filter { it.id in selectedIds }
-                    val pinTargets = selectedNotes.filter { it.archivedAt == null }
-                    val allArchived = selectedNotes.isNotEmpty() && pinTargets.isEmpty()
-                    SelectionTopBar(
-                        count = lastSelectedCount[0],
-                        canPin = pinTargets.isNotEmpty(),
-                        allPinned = pinTargets.isNotEmpty() && pinTargets.all { it.pinnedAt != null },
-                        allArchived = allArchived,
-                        containerColor = bgColor,
-                        onClose = { selectedIds = emptySet() },
-                        onTogglePin = {
-                            val ids = pinTargets.map { it.id }
-                            // all pinned -> unpin them all, otherwise pin them all
-                            val pin = !pinTargets.all { it.pinnedAt != null }
-                            haptic(HapticKind.CONFIRM)
-                            ApplicationScope.scope.launch { repository.setPinnedMany(ids, pin) }
-                            selectedIds = emptySet()
-                        },
-                        onArchive = {
-                            selectedIds = emptySet()
-                            if (allArchived) {
-                                val ids = selectedNotes.map { it.id }
-                                haptic(HapticKind.CONFIRM)
-                                ApplicationScope.scope.launch { repository.unarchiveMany(ids) }
-                            } else {
-                                archiveNotes(pinTargets.map { it.id })
-                            }
-                        },
-                        onDelete = {
-                            // The notes as they are now (with their pin), then the selection ends
-                            val targets = selectedNotes
-                            selectedIds = emptySet()
-                            deleteNotes(targets)
-                        },
-                        onSelectAll = {
-                            haptic(HapticKind.TICK)
-                            selectedIds = shownNotes.mapTo(HashSet()) { it.id }
-                        }
+                    HomeTopBar(
+                        selectionMode = selectionMode,
+                        selectedIds = selectedIds,
+                        everyNote = everyNote,
+                        shownNotes = shownNotes,
+                        bgColor = bgColor,
+                        repository = repository,
+                        onMenuClick = { drawerScope.launch { drawerState.open() } },
+                        onClearSelection = { selectedIds = emptySet() },
+                        onSelectAll = { selectedIds = it },
+                        onArchiveNotes = { archiveNotes(it) },
+                        onDeleteNotes = { deleteNotes(it) }
                     )
-                  } else {
-                    // A normal-height bar: the title and the menu button share one line, so there
-                    // is no empty space above the title. The 4.dp / 16.dp paddings put the title
-                    // and the menu button on the same 20.dp edges as the tagline and the search bar.
-                    TopAppBar(
-                        title = {
-                            Text(
-                                "Elnor",
-                                modifier = Modifier.padding(start = 4.dp),
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        actions = {
-                            // Hamburger button: opens the side menu (Settings, Trash)
-                            FilledTonalIconButton(
-                                onClick = { drawerScope.launch { drawerState.open() } },
-                                modifier = Modifier.padding(end = 16.dp)
-                            ) {
-                                Icon(Icons.Default.Menu, contentDescription = "Open menu")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = bgColor,
-                            scrolledContainerColor = bgColor
-                        )
-                    )
-                  }
-                  }
                 },
                 // The bottom bar floats over the list, in the place of the old "New note" button
                 floatingActionButton = {
@@ -417,442 +362,97 @@ fun ElnorApp(
                     animationSpec = Motion.short(),
                     label = "homeTab"
                 ) { tab ->
-                if (tab != HomeTab.NOTE) {
-                    if (tab == HomeTab.TASK) {
-                        TasksScreen(
-                            repository = taskRepository,
-                            padding = padding,
-                            addDialogOpen = newTaskOpen,
-                            onAddDialogDismiss = { newTaskOpen = false },
-                            snackbarHostState = snackbarHostState
-                        )
-                    } else {
-                        HomeTabPlaceholder(
-                            title = "Collections are coming soon",
-                            subtitle = "Group your notes and tasks here.",
-                            padding = padding
-                        )
-                    }
-                } else {
-                                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(bgColor)
-                        .centeredMaxWidth(HomeMaxWidth)
-                        .padding(padding)
-                        .padding(horizontal = 20.dp)
-                ) {
-                    // No tagline: the header is kept compact, so more notes fit on the screen. A phone
-                    // held sideways has little height, so it gets no gap under the bar at all.
-                    if (!windowClass.compactHeight) {
-                        Spacer(Modifier.height(4.dp))
-                    }
-
-                    // A soft surface with a thin, low-contrast border. When the field is focused,
-                    // the border and the icons turn to the accent colour.
-                    val onSurface = MaterialTheme.colorScheme.onSurface
-                    val searchColors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = onSurface,
-                        unfocusedTextColor = onSurface,
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                        cursorColor = MaterialTheme.colorScheme.primary,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = onSurface.copy(alpha = 0.12f),
-                        focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
-                        unfocusedLeadingIconColor = onSurface.copy(alpha = 0.6f),
-                        focusedTrailingIconColor = onSurface.copy(alpha = 0.7f),
-                        unfocusedTrailingIconColor = onSurface.copy(alpha = 0.7f),
-                        focusedPlaceholderColor = onSurface.copy(alpha = 0.5f),
-                        unfocusedPlaceholderColor = onSurface.copy(alpha = 0.5f)
-                    )
-
-                    OutlinedTextField(
-                        value = search,
-                        // A new search ends the selection, so an action never reaches a note that is not on the screen
-                        onValueChange = {
-                            if (it != search) selectedIds = emptySet()
-                            search = it
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onFocusChanged { state ->
-                                // Leaving the field with a search typed counts as a search
-                                if (searchFocused && !state.isFocused) commitSearch(search)
-                                searchFocused = state.isFocused
-                            },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            commitSearch(search)
-                            focusManager.clearFocus()
-                        }),
-                        placeholder = { Text("Search your notes...") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null)
-                        },
-                        // The clear button is only there while there is text
-                        trailingIcon = if (search.isNotEmpty()) {
-                            {
-                                IconButton(onClick = {
-                                    search = ""
-                                    selectedIds = emptySet()
-                                }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
-                                }
-                            }
+                    if (tab != HomeTab.NOTE) {
+                        if (tab == HomeTab.TASK) {
+                            TasksScreen(
+                                repository = taskRepository,
+                                padding = padding,
+                                addDialogOpen = newTaskOpen,
+                                onAddDialogDismiss = { newTaskOpen = false },
+                                snackbarHostState = snackbarHostState
+                            )
                         } else {
-                            null
-                        },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyLarge,
-                        shape = CircleShape,
-                        colors = searchColors
-                    )
-
-                    // The panel opens downwards and fades in, and closes the same way
-                    AnimatedVisibility(
-                        visible = searchFocused && search.isEmpty() && recentSearches.isNotEmpty(),
-                        enter = expandVertically(Motion.short()) + fadeIn(Motion.short()),
-                        exit = shrinkVertically(Motion.short()) + fadeOut(Motion.short())
-                    ) {
-                        Column {
-                            Spacer(Modifier.height(8.dp))
-                            RecentSearchesPanel(
-                                items = recentSearches,
-                                onPick = { picked ->
-                                    search = picked
-                                    selectedIds = emptySet()
-                                    focusManager.clearFocus()
-                                },
-                                onRemove = { item ->
-                                    recentSearches = RecentSearches.remove(recentSearches, item)
-                                    saveRecentSearches(context, recentSearches)
-                                },
-                                onClearAll = {
-                                    recentSearches = emptyList()
-                                    saveRecentSearches(context, emptyList())
-                                }
+                            HomeTabPlaceholder(
+                                title = "Collections are coming soon",
+                                subtitle = "Group your notes and tasks here.",
+                                padding = padding
                             )
                         }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Your notes",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            // The notes that are shown now: fewer while a search is active
-                            notesCountLabel(shownNotes.size),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        // Sort order of the notes (pinned notes stay first)
-                        var sortMenuOpen by remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(onClick = { sortMenuOpen = true }) {
-                                Icon(
-                                    SortIcon,
-                                    contentDescription = "Sort notes",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = sortMenuOpen,
-                                onDismissRequest = { sortMenuOpen = false }
-                            ) {
-                                for (option in NotesSort.entries) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                option.label,
-                                                fontWeight = if (option == sort) FontWeight.Bold
-                                                else FontWeight.Normal
-                                            )
-                                        },
-                                        trailingIcon = {
-                                            if (option == sort) {
-                                                Icon(Icons.Default.Check, contentDescription = "Selected")
-                                            }
-                                        },
-                                        onClick = {
-                                            sortMenuOpen = false
-                                            if (option != sort) haptic(HapticKind.TICK)
-                                            sort = option
-                                            saveNotesSort(context, option)
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                        // The button shows the view it switches to
-                        IconButton(
-                            onClick = {
+                    } else {
+                        NotesTabContent(
+                            padding = padding,
+                            bgColor = bgColor,
+                            compactHeight = windowClass.compactHeight,
+                            search = search,
+                            // A new search ends the selection, so an action never reaches a note that is not on the screen
+                            onSearchChange = {
+                                if (it != search) selectedIds = emptySet()
+                                search = it
+                            },
+                            onClearSearch = {
+                                search = ""
+                                selectedIds = emptySet()
+                            },
+                            onSearchFocusChange = { focused ->
+                                // Leaving the field with a search typed counts as a search
+                                if (searchFocused && !focused) commitSearch(search)
+                                searchFocused = focused
+                            },
+                            onSearchSubmit = { commitSearch(search) },
+                            showRecentSearches = searchFocused && search.isEmpty() && recentSearches.isNotEmpty(),
+                            recentSearches = recentSearches,
+                            onPickRecent = { picked ->
+                                search = picked
+                                selectedIds = emptySet()
+                            },
+                            onRemoveRecent = { item ->
+                                recentSearches = RecentSearches.remove(recentSearches, item)
+                                saveRecentSearches(context, recentSearches)
+                            },
+                            onClearRecents = {
+                                recentSearches = emptyList()
+                                saveRecentSearches(context, emptyList())
+                            },
+                            shownNotes = shownNotes,
+                            notesLoaded = notesLoaded,
+                            sort = sort,
+                            onSortChange = { option ->
+                                if (option != sort) haptic(HapticKind.TICK)
+                                sort = option
+                                saveNotesSort(context, option)
+                            },
+                            viewMode = viewMode,
+                            onToggleViewMode = {
                                 haptic(HapticKind.TICK)
                                 viewMode = viewMode.toggled()
                                 saveNotesViewMode(context, viewMode)
-                            }
-                        ) {
-                            Icon(
-                                if (viewMode == NotesViewMode.LIST) GridViewIcon
-                                else Icons.AutoMirrored.Filled.List,
-                                contentDescription = if (viewMode == NotesViewMode.LIST)
-                                    "Switch to grid view" else "Switch to list view",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    // What fills the rest of the screen: the loading circle, the empty message or
-                    // the notes. They fade into each other.
-                    val pane = when {
-                        !notesLoaded && search.isBlank() -> NotesPane.LOADING
-                        shownNotes.isEmpty() -> NotesPane.EMPTY
-                        else -> NotesPane.NOTES
-                    }
-                    Crossfade(
-                        targetState = pane,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        animationSpec = Motion.short(),
-                        label = "notesPane"
-                    ) { shownPane ->
-                    if (shownPane == NotesPane.LOADING) {
-                        // The database has not answered yet (a split second at start-up)
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    } else if (shownPane == NotesPane.EMPTY) {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                if (search.isBlank()) "Your space is empty"
-                                else "No notes found",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                if (search.isBlank())
-                                    "Tap + to capture your first thought."
-                                else "Try searching with another word.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
-                            )
-                        }
-                    } else {
-                        // One card, used by the list and by the grid. [itemModifier] carries
-                        // Modifier.animateItem() from the lazy list / grid, so a note that is added,
-                        // removed, pinned or re-sorted fades and slides instead of jumping.
-                        val noteItem: @Composable (Note, Modifier) -> Unit = { note, itemModifier ->
-                            // The color comes from the note's id, not from its place in the list,
-                            // so it stays the same when notes are added, pinned or searched
-                            val cardColor = if (dark) {
-                                MaterialTheme.colorScheme.surface
-                            } else {
-                                cardColors[cardColorIndex(note.id, cardColors.size)]
-                            }
-
-                            NoteCard(
-                                note = note,
-                                cardColor = cardColor,
-                                dark = dark,
-                                modifier = itemModifier,
-                                onClick = {
-                                    if (selectionMode) {
-                                        toggleSelected(note.id)
-                                    } else {
-                                        // Opening a result shows the search was useful: remember it
-                                        commitSearch(search)
-                                        openNote(note.id)
-                                    }
-                                },
-                                // Touch and hold: start selecting (or select one more note)
-                                onLongClick = {
-                                    if (selectionMode) {
-                                        toggleSelected(note.id)
-                                    } else {
-                                        haptic(HapticKind.LONG_PRESS) // the selection starts
-                                        selectedIds = setOf(note.id)
-                                    }
-                                },
-                                selected = note.id in selectedIds,
-                                // No three-dot menu while selecting: the bar at the top has the actions
-                                menuActions = if (selectionMode) {
-                                    emptyList()
-                                } else {
-                                    val deleteAction = NoteMenuAction(
-                                        label = "Delete",
-                                        isDestructive = true,
-                                        onClick = { deleteNotes(listOf(note)) }
-                                    )
-                                    if (note.archivedAt != null) {
-                                        // An archived note (a search result) goes back to the list
-                                        listOf(
-                                            NoteMenuAction(
-                                                label = "Unarchive",
-                                                onClick = {
-                                                    haptic(HapticKind.CONFIRM)
-                                                    ApplicationScope.scope.launch {
-                                                        repository.unarchiveMany(listOf(note.id))
-                                                    }
-                                                }
-                                            ),
-                                            deleteAction
-                                        )
-                                    } else {
-                                        listOf(
-                                            // Pinned notes are listed first. The list follows the
-                                            // repository, so it reorders by itself.
-                                            NoteMenuAction(
-                                                label = if (note.pinnedAt != null) "Unpin" else "Pin",
-                                                onClick = {
-                                                    haptic(HapticKind.CONFIRM)
-                                                    ApplicationScope.scope.launch {
-                                                        repository.setPinned(note.id, note.pinnedAt == null)
-                                                    }
-                                                }
-                                            ),
-                                            NoteMenuAction(
-                                                label = "Archive",
-                                                onClick = { archiveNotes(listOf(note.id)) }
-                                            ),
-                                            deleteAction
-                                        )
-                                    }
-                                }
-                            )
-                        }
-
-                        // The list and the grid fade into each other when the view is switched
-                        Crossfade(
-                            targetState = viewMode,
-                            modifier = Modifier.fillMaxSize(),
-                            animationSpec = Motion.short(),
-                            label = "viewMode"
-                        ) { shownMode ->
-                        if (shownMode == NotesViewMode.LIST) {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(13.dp),
-                                contentPadding = PaddingValues(bottom = if (showRail) 24.dp else 100.dp)
-                            ) {
-                                items(shownNotes, key = { it.id }) { note ->
-                                    noteItem(note, Modifier.animateItem())
-                                }
-                            }
-                        } else {
-                            // Two columns on a phone, more on wider windows. Every card is as tall as its text,
-                            // so they fit together.
-                            LazyVerticalStaggeredGrid(
-                                columns = StaggeredGridCells.Fixed(
-                                    // In two-pane the list is only TwoPaneListWidth wide
-                                    gridColumnCount(
-                                        if (twoPane) TwoPaneListWidth.value.toInt()
-                                        else windowClass.widthDp - railWidthDp
-                                    )
-                                ),
-                                state = gridState,
-                                modifier = Modifier.fillMaxSize(),
-                                verticalItemSpacing = 13.dp,
-                                horizontalArrangement = Arrangement.spacedBy(13.dp),
-                                contentPadding = PaddingValues(bottom = if (showRail) 24.dp else 100.dp)
-                            ) {
-                                items(shownNotes, key = { it.id }) { note ->
-                                    noteItem(note, Modifier.animateItem())
-                                }
-                            }
-                        }
-                        } // end of Crossfade (list / grid)
-                    }
-                    } // end of Crossfade (loading / empty / notes)
-                }
-                } // end of the Note tab
-                } // end of Crossfade (tabs)
-            }
-        }
-
-    }
-
-    Row(Modifier.fillMaxSize().background(bgColor)) {
-        // The tabs and the round "+" button are on the left edge, before the list and the editor
-        if (showRail) {
-            ElnorNavigationRail(
-                selected = homeTab,
-                dark = dark,
-                onSelect = { selectHomeTab(it) },
-                onNewNote = { onNewNoteClick() }
-            )
-        }
-        Box(
-            Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                // The rail already keeps clear of a bar on the left edge
-                .then(
-                    if (showRail) {
-                        Modifier.consumeWindowInsets(
-                            WindowInsets.systemBars.only(WindowInsetsSides.Start)
-                        )
-                    } else Modifier
-                )
-        ) {
-        if (twoPane) {
-            Row(Modifier.fillMaxSize().background(bgColor)) {
-                Box(Modifier.width(TwoPaneListWidth).fillMaxHeight()) { listPane() }
-                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                Box(Modifier.weight(1f).fillMaxHeight().background(bgColor)) {
-                    if (editorOpen) {
-                        editorPane()
-                    } else {
-                        HomeTabPlaceholder(
-                            title = "Select a note",
-                            subtitle = "Or tap + to write a new one.",
-                            padding = PaddingValues()
+                            },
+                            listState = listState,
+                            gridState = gridState,
+                            showRail = showRail,
+                            // In two-pane the list is only TwoPaneListWidth wide
+                            gridColumns = gridColumnCount(
+                                if (twoPane) TwoPaneListWidth.value.toInt()
+                                else windowClass.widthDp - railWidthDp
+                            ),
+                            noteItem = noteItem
                         )
                     }
                 }
             }
-        } else {
-            // The editor page rises a little and fades in over the list; when it closes it fades away
-            // and the list shows through. The page colour behind keeps the two from showing through
-            // each other.
-            AnimatedContent(
-                targetState = editorOpen,
-                modifier = Modifier.fillMaxSize().background(bgColor),
-                transitionSpec = { Motion.page(opening = targetState) },
-                label = "homeEditor"
-            ) { showEditor ->
-                // A page that is already sliding out must not answer Back again (the editor would save
-                // and close twice). Registered after the page below, so it is asked first.
-                val leaving = transition.targetState == EnterExitState.PostExit
-                if (showEditor) {
-                    editorPane()
-                    BackHandler(enabled = leaving) { }
-                } else {
-                    listPane()
-                }
-            }
-        }
         }
     }
+
+    HomeLayout(
+        bgColor = bgColor,
+        dark = dark,
+        showRail = showRail,
+        twoPane = twoPane,
+        editorOpen = editorOpen,
+        homeTab = homeTab,
+        onSelectTab = { selectHomeTab(it) },
+        onNewNote = { onNewNoteClick() },
+        listPane = listPane,
+        editorPane = editorPane
+    )
 }

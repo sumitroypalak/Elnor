@@ -2,44 +2,21 @@
 
 package com.elnor.app
 
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +25,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // ----------------------------- Editor screen -------------------------------
+//
+// This file holds the state and the logic of the note page. The parts that only draw are in their
+// own files: EditorTopBar.kt (top bar and its menu), EditorTextCard.kt (title and text fields),
+// EditorBottomArea.kt (formatting buttons, link button, count) and UnsavedNoteDialog.kt.
 
 @Composable
 fun EditorScreen(
@@ -275,151 +256,33 @@ fun EditorScreen(
     // Registered after the one above, so it wins: Back closes the Find bar first
     BackHandler(enabled = findOpen) { closeFind() }
 
-    val fieldColors = TextFieldDefaults.colors(
-        focusedContainerColor = Color.Transparent,
-        unfocusedContainerColor = Color.Transparent,
-        disabledContainerColor = Color.Transparent,
-        focusedIndicatorColor = Color.Transparent,
-        unfocusedIndicatorColor = Color.Transparent,
-        disabledIndicatorColor = Color.Transparent
-    )
-
-    // Save the note as a file: Android's "Save as" screen asks where. The text is taken when the
-    // user has chosen the place, so the file has what is on the screen at that moment.
-    var moreMenuOpen by remember { mutableStateOf(false) }
-    val saveTxtLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(NoteExportFormat.TXT.mimeType)
-    ) { uri ->
-        if (uri != null) saveNoteToUri(context, uri, title, bodyValue.text, NoteExportFormat.TXT)
-    }
-    val saveMdLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(NoteExportFormat.MD.mimeType)
-    ) { uri ->
-        if (uri != null) saveNoteToUri(context, uri, title, bodyValue.text, NoteExportFormat.MD)
-    }
-
     Scaffold(
         containerColor = bgColor,
         // imePadding: the message must stay above the keyboard
         snackbarHost = { SnackbarHost(snackbarHostState, modifier = Modifier.imePadding()) },
         topBar = {
-            TopAppBar(
-                title = {},
-                // Normal height is 64.dp; a phone held sideways gives the text more room
-                expandedHeight = if (compactHeight) 48.dp else 64.dp,
-                navigationIcon = {
-                    IconButton(onClick = { saveAndClose() }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Save and go back"
-                        )
-                    }
+            EditorTopBar(
+                title = title,
+                bodyText = bodyValue.text,
+                compactHeight = compactHeight,
+                bgColor = bgColor,
+                canUndo = canUndo,
+                canRedo = canRedo,
+                canPin = canPin,
+                pinned = pinned,
+                canDelete = canDelete,
+                onBack = { saveAndClose() },
+                onUndo = {
+                    haptic(HapticKind.TICK)
+                    showSnapshot(viewModel.undo())
                 },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            haptic(HapticKind.TICK)
-                            showSnapshot(viewModel.undo())
-                        },
-                        enabled = canUndo
-                    ) {
-                        Icon(UndoIcon, contentDescription = "Undo")
-                    }
-                    IconButton(
-                        onClick = {
-                            haptic(HapticKind.TICK)
-                            showSnapshot(viewModel.redo())
-                        },
-                        enabled = canRedo
-                    ) {
-                        Icon(RedoIcon, contentDescription = "Redo")
-                    }
-                    // Find in note: only when there is some text to look in
-                    if (bodyValue.text.isNotEmpty()) {
-                        IconButton(onClick = { findOpen = true }) {
-                            Icon(Icons.Default.Search, contentDescription = "Find in note")
-                        }
-                    }
-                    // Pin: a solid blue pin when the note is pinned, a line pin when it is not
-                    if (canPin) {
-                        IconButton(onClick = { togglePin() }) {
-                            Icon(
-                                if (pinned) PinIcon else PinOutlineIcon,
-                                contentDescription = if (pinned) "Unpin note" else "Pin note",
-                                tint = if (pinned) MaterialTheme.colorScheme.primary
-                                else LocalContentColor.current
-                            )
-                        }
-                    }
-                    // The title and the text that are on the screen now (also if not saved yet)
-                    val copyText = noteTextForCopy(title, bodyValue.text)
-                    // One three-dot menu: Copy, Share, Save as a file, and Delete
-                    if (copyText.isNotEmpty() || canDelete) {
-                        Box {
-                            IconButton(onClick = { moreMenuOpen = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                            }
-                            DropdownMenu(
-                                expanded = moreMenuOpen,
-                                onDismissRequest = { moreMenuOpen = false }
-                            ) {
-                                if (copyText.isNotEmpty()) {
-                                    DropdownMenuItem(
-                                        text = { Text("Copy text") },
-                                        onClick = {
-                                            moreMenuOpen = false
-                                            copyTextToClipboard(context, copyText)
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Share") },
-                                        onClick = {
-                                            moreMenuOpen = false
-                                            AppLock.expectExternalScreen() // the Share sheet is not "leaving" Elnor
-                                            shareNote(context, title, bodyValue.text)
-                                        }
-                                    )
-                                    for (format in NoteExportFormat.entries) {
-                                        DropdownMenuItem(
-                                            text = { Text(format.label) },
-                                            onClick = {
-                                                moreMenuOpen = false
-                                                AppLock.expectExternalScreen() // the "Save as" screen is not "leaving" Elnor
-                                                val name = NoteExport.fileName(title, bodyValue.text, format)
-                                                val launched = runCatching {
-                                                    when (format) {
-                                                        NoteExportFormat.TXT -> saveTxtLauncher.launch(name)
-                                                        NoteExportFormat.MD -> saveMdLauncher.launch(name)
-                                                    }
-                                                }.isSuccess
-                                                if (!launched) {
-                                                    Toast.makeText(
-                                                        context.applicationContext,
-                                                        "Could not open the Save screen",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                            }
-                                        )
-                                    }
-                                }
-                                if (copyText.isNotEmpty() && canDelete) HorizontalDivider()
-                                if (canDelete) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text("Delete", color = MaterialTheme.colorScheme.error)
-                                        },
-                                        onClick = {
-                                            moreMenuOpen = false
-                                            deleteAndClose()
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
+                onRedo = {
+                    haptic(HapticKind.TICK)
+                    showSnapshot(viewModel.redo())
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
+                onFind = { findOpen = true },
+                onTogglePin = { togglePin() },
+                onDelete = { deleteAndClose() }
             )
         }
     ) { padding ->
@@ -456,224 +319,64 @@ fun EditorScreen(
                 )
             }
 
-            // The title and the text sit on one rounded card, in the same shape as the note cards
-            // of the home screen. It fills the rest of the screen.
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(top = 4.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surface,
-                // A white card on the light page needs a thin edge (the dark card does not)
-                border = if (dark) null else BorderStroke(
-                    1.dp,
-                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-                )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = 8.dp)
-                ) {
-                    // Title (optional)
-                    TextField(
-                        value = title,
-                        onValueChange = {
-                            title = it
-                            viewModel.onTitleChange(it) // saved after a typing pause
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        placeholder = {
-                            Text(
-                                "Title",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
-                            )
-                        },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                        keyboardActions = KeyboardActions(
-                            onNext = { bodyFocus.requestFocus() }
-                        ),
-                        colors = fieldColors
-                    )
-
-                    // When the note was last saved (nothing for a note that was never saved)
-                    if (lastEdited != null) {
-                        Text(
-                            lastEdited,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                        )
+            // The title and the text, on one rounded card that fills the rest of the screen
+            EditorTextCard(
+                dark = dark,
+                title = title,
+                onTitleChange = {
+                    title = it
+                    viewModel.onTitleChange(it) // saved after a typing pause
+                },
+                lastEdited = lastEdited,
+                bodyValue = bodyValue,
+                onBodyChange = {
+                    // Enter inside a list starts the next item (or ends the list on an empty item)
+                    val listEdit = if (it.selection.collapsed) {
+                        MarkdownFormat.afterNewline(bodyValue.text, it.text, it.selection.start)
+                    } else {
+                        null
                     }
-
-                    // Body: fills the rest of the card
-                    TextField(
-                        value = bodyValue,
-                        onValueChange = {
-                            // Enter inside a list starts the next item (or ends the list on an empty item)
-                            val listEdit = if (it.selection.collapsed) {
-                                MarkdownFormat.afterNewline(bodyValue.text, it.text, it.selection.start)
-                            } else {
-                                null
-                            }
-                            val next = if (listEdit != null) {
-                                TextFieldValue(listEdit.text, TextRange(listEdit.selStart, listEdit.selEnd))
-                            } else {
-                                it
-                            }
-                            bodyValue = next
-                            viewModel.onBodyChange(next.text, next.selection.start, next.selection.end) // saved after a typing pause
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .focusRequester(bodyFocus)
-                            .onFocusChanged { bodyFocused = it.isFocused },
-                        visualTransformation = textStyling,
-                        textStyle = MaterialTheme.typography.bodyLarge,
-                        placeholder = {
-                            Text(
-                                "Start writing...",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
-                            )
-                        },
-                        colors = fieldColors
-                    )
-                }
-            }
+                    val next = if (listEdit != null) {
+                        TextFieldValue(listEdit.text, TextRange(listEdit.selStart, listEdit.selEnd))
+                    } else {
+                        it
+                    }
+                    bodyValue = next
+                    viewModel.onBodyChange(next.text, next.selection.start, next.selection.end) // saved after a typing pause
+                },
+                bodyFocus = bodyFocus,
+                onBodyFocusChange = { bodyFocused = it },
+                textStyling = textStyling
+            )
 
             Spacer(Modifier.height(8.dp))
 
-            // Stays on the screen as long as the last save has not worked
-            if (saveFailed) {
-                Text(
-                    "Not saved yet. Elnor will try again when you type or leave.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                )
-            }
-
-            // Bold, heading and list buttons for the text (not for the title). The button for the
-            // link the cursor is in (Call / Email / Open) shares the row, so it takes no extra height.
-            // The row rises from the bottom and fades in when the text gets the focus
-            AnimatedVisibility(
-                visible = bodyFocused,
-                enter = expandVertically(Motion.short()) +
-                    slideInVertically(Motion.short()) { it / 2 } + fadeIn(Motion.short()),
-                exit = shrinkVertically(Motion.short()) +
-                    slideOutVertically(Motion.short()) { it / 2 } + fadeOut(Motion.short())
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    FormatToolbar(
-                        compact = compactHeight,
-                        onBold = { applyFormat(MarkdownFormat::toggleBold) },
-                        onHeading = { applyFormat(MarkdownFormat::cycleHeading) },
-                        onBullet = { applyFormat(MarkdownFormat::toggleBullet) },
-                        onNumbered = { applyFormat(MarkdownFormat::toggleNumbered) }
-                    )
-                    // The link button fades in and out with a small zoom. While it goes out the
-                    // last link is still shown (the cursor has already left it).
-                    if (activeLink != null) lastLink[0] = activeLink
-                    AnimatedVisibility(
-                        visible = activeLink != null,
-                        modifier = Modifier.weight(1f, fill = false),
-                        enter = fadeIn(Motion.short()) + scaleIn(Motion.short(), initialScale = 0.85f),
-                        exit = fadeOut(Motion.short()) + scaleOut(Motion.short(), targetScale = 0.85f)
-                    ) {
-                        val shownLink = lastLink[0]
-                        if (shownLink != null) {
-                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                Spacer(Modifier.width(8.dp))
-                                LinkActionChip(
-                                    link = shownLink,
-                                    onClick = {
-                                        AppLock.expectExternalScreen() // the dialer / browser is not "leaving" Elnor
-                                        openLink(context, shownLink)
-                                    },
-                                    modifier = Modifier.weight(1f, fill = false)
-                                )
-                            }
-                        }
-                    }
-                    // A phone held sideways: the count shares the row of the buttons, so the
-                    // text keeps one more line
-                    if (compactHeight) {
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            formatNoteStats(stats),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                            maxLines = 1,
-                            modifier = Modifier.padding(start = 8.dp, end = 4.dp)
-                        )
-                    }
-                }
-            }
-
-            // Word and character count, just above the keyboard (in the row of the buttons
-            // instead, while they are shown on a phone held sideways)
-            if (!(compactHeight && bodyFocused)) Text(
-                formatNoteStats(stats),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp)
+            // The "not saved" line, the formatting buttons and the word / character count
+            EditorBottomArea(
+                saveFailed = saveFailed,
+                bodyFocused = bodyFocused,
+                compactHeight = compactHeight,
+                statsText = formatNoteStats(stats),
+                activeLink = activeLink,
+                lastLink = lastLink,
+                onBold = { applyFormat(MarkdownFormat::toggleBold) },
+                onHeading = { applyFormat(MarkdownFormat::cycleHeading) },
+                onBullet = { applyFormat(MarkdownFormat::toggleBullet) },
+                onNumbered = { applyFormat(MarkdownFormat::toggleNumbered) }
             )
         }
     }
 
     if (confirmLeaveUnsaved) {
-        AlertDialog(
-            onDismissRequest = {
+        UnsavedNoteDialog(
+            onKeepEditing = {
                 confirmLeaveUnsaved = false
                 viewModel.retrySave()
             },
-            title = { Text("Note not saved", fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "Elnor could not save this note. If you leave now, your latest changes " +
-                        "may be lost. Use Copy text in the menu to keep the text first."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmLeaveUnsaved = false
-                        viewModel.onBack() // one last try
-                        onClose()
-                    }
-                ) {
-                    Text("Leave anyway", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        confirmLeaveUnsaved = false
-                        viewModel.retrySave()
-                    }
-                ) {
-                    Text("Keep editing")
-                }
+            onLeave = {
+                confirmLeaveUnsaved = false
+                viewModel.onBack() // one last try
+                onClose()
             }
         )
     }
