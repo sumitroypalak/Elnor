@@ -358,6 +358,62 @@ object MarkdownFormat {
     fun plainText(text: String): String =
         if (text.isEmpty()) text else text.split('\n').joinToString("\n") { plainLine(it) }
 
+    // ---- Reading a line as a block (for the preview) ----
+
+    enum class BlockKind { PARAGRAPH, HEADING1, HEADING2, BULLET, NUMBERED }
+
+    /**
+     * One line of a note, cut into its parts for the preview. [indent] is the width of the spaces
+     * in front of a list mark (a tab counts as 4). [number] is the number of a numbered item as it
+     * was typed ("3"), null for the other kinds. [content] is what follows the mark.
+     */
+    data class Block(val kind: BlockKind, val indent: Int, val number: String?, val content: String)
+
+    /** What kind of line [line] is. It follows the same rules as [parse]. */
+    fun blockOf(line: String): Block {
+        val heading = HEADING.find(line)
+        if (heading != null) {
+            val kind = if (heading.groupValues[1].length == 1) BlockKind.HEADING1 else BlockKind.HEADING2
+            return Block(kind, 0, null, line.substring(heading.value.length))
+        }
+        val bullet = BULLET.find(line)
+        if (bullet != null) {
+            return Block(BlockKind.BULLET, indentWidth(bullet.groupValues[1]), null, line.substring(bullet.value.length))
+        }
+        val number = NUMBER.find(line)
+        if (number != null) {
+            return Block(
+                BlockKind.NUMBERED,
+                indentWidth(number.groupValues[1]),
+                number.groupValues[2],
+                line.substring(number.value.length)
+            )
+        }
+        return Block(BlockKind.PARAGRAPH, 0, null, line)
+    }
+
+    private fun indentWidth(indent: String): Int {
+        var width = 0
+        for (c in indent) width += if (c == '\t') 4 else 1
+        return width
+    }
+
+    /**
+     * [text] cut into pieces: the bold words (without the **, second value true) and the text
+     * between them (second value false). Nothing is left out except the **.
+     */
+    fun boldRuns(text: String): List<Pair<String, Boolean>> {
+        val result = ArrayList<Pair<String, Boolean>>()
+        var position = 0
+        for (match in BOLD.findAll(text)) {
+            if (match.range.first > position) result.add(text.substring(position, match.range.first) to false)
+            result.add(match.groupValues[1] to true)
+            position = match.range.last + 1
+        }
+        if (position < text.length) result.add(text.substring(position) to false)
+        return result
+    }
+
     // ---- helpers ----
 
     private fun insertAtCursor(text: String, at: Int, insert: String, cursorInside: Int): TextEdit =

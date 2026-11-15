@@ -37,6 +37,10 @@ import androidx.compose.ui.unit.dp
  * It only draws the two fields. The page ([EditorScreen]) keeps the text and does the work in
  * [onTitleChange] and [onBodyChange] (for example telling the ViewModel, so it is saved after a
  * typing pause).
+ *
+ * With [previewMode] the card shows the note as a reading page instead of the two fields: the title
+ * as a heading and the text without the formatting marks (see [MarkdownPreviewView]). Nothing can
+ * be typed there; a tap on a link calls [onOpenLink].
  */
 @Composable
 internal fun ColumnScope.EditorTextCard(
@@ -48,7 +52,9 @@ internal fun ColumnScope.EditorTextCard(
     onBodyChange: (TextFieldValue) -> Unit,
     bodyFocus: FocusRequester,
     onBodyFocusChange: (Boolean) -> Unit,
-    textStyling: NoteTextTransformation
+    textStyling: NoteTextTransformation,
+    previewMode: Boolean,
+    onOpenLink: (LinkSpan) -> Unit
 ) {
     val fieldColors = TextFieldDefaults.colors(
         focusedContainerColor = Color.Transparent,
@@ -77,29 +83,42 @@ internal fun ColumnScope.EditorTextCard(
                 .fillMaxSize()
                 .padding(top = 8.dp)
         ) {
-            // Title (optional)
-            TextField(
-                value = title,
-                onValueChange = onTitleChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.headlineSmall.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-                placeholder = {
+            if (previewMode) {
+                // The title as a heading (nothing at all when the note has no title)
+                if (title.isNotBlank()) {
                     Text(
-                        "Title",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                        title,
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
                     )
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                keyboardActions = KeyboardActions(
-                    onNext = { bodyFocus.requestFocus() }
-                ),
-                colors = fieldColors
-            )
+                }
+            } else {
+                // Title (optional)
+                TextField(
+                    value = title,
+                    onValueChange = onTitleChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.headlineSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    placeholder = {
+                        Text(
+                            "Title",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                        )
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(
+                        onNext = { bodyFocus.requestFocus() }
+                    ),
+                    colors = fieldColors
+                )
+            }
 
             // When the note was last saved (nothing for a note that was never saved)
             if (lastEdited != null) {
@@ -113,26 +132,37 @@ internal fun ColumnScope.EditorTextCard(
                 )
             }
 
-            // Body: fills the rest of the card
-            TextField(
-                value = bodyValue,
-                onValueChange = onBodyChange,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .focusRequester(bodyFocus)
-                    .onFocusChanged { onBodyFocusChange(it.isFocused) },
-                visualTransformation = textStyling,
-                textStyle = MaterialTheme.typography.bodyLarge,
-                placeholder = {
-                    Text(
-                        "Start writing...",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
-                    )
-                },
-                colors = fieldColors
-            )
+            if (previewMode) {
+                // The reading page: fills the rest of the card
+                MarkdownPreviewView(
+                    text = bodyValue.text,
+                    onOpenLink = onOpenLink,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                )
+            } else {
+                // Body: fills the rest of the card
+                TextField(
+                    value = bodyValue,
+                    onValueChange = onBodyChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .focusRequester(bodyFocus)
+                        .onFocusChanged { onBodyFocusChange(it.isFocused) },
+                    visualTransformation = textStyling,
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    placeholder = {
+                        Text(
+                            "Start writing...",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                        )
+                    },
+                    colors = fieldColors
+                )
+            }
         }
     }
 }

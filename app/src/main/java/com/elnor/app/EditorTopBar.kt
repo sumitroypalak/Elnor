@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -19,12 +20,16 @@ import androidx.compose.ui.unit.dp
 // The top bar of the note page (split out of EditorScreen.kt, nothing changed in how it works).
 
 /**
- * Back arrow, Undo / Redo, Find, Pin and the three-dot menu (Copy, Share, Save as a file, Delete).
+ * Back arrow, Undo / Redo, Find, Preview, Pin and the three-dot menu (Copy, Share, Save as a file,
+ * Delete).
  *
  * The bar only draws and reports clicks: the page ([EditorScreen]) owns the text and does the work
- * in [onBack], [onUndo], [onRedo], [onFind], [onTogglePin] and [onDelete]. [title] and [bodyText]
- * are the text that is on the screen now (also if it is not saved yet), used by Copy, Share and
- * Save as a file.
+ * in [onBack], [onUndo], [onRedo], [onFind], [onTogglePreview], [onTogglePin] and [onDelete].
+ * [title] and [bodyText] are the text that is on the screen now (also if it is not saved yet), used
+ * by Copy, Share and Save as a file.
+ *
+ * While [previewMode] is on (the note is shown as a reading page) there is no text field to work
+ * on, so Undo, Redo and Find are left out, and the Preview button turns into the Edit button.
  */
 @Composable
 internal fun EditorTopBar(
@@ -37,10 +42,12 @@ internal fun EditorTopBar(
     canPin: Boolean,
     pinned: Boolean,
     canDelete: Boolean,
+    previewMode: Boolean,
     onBack: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onFind: () -> Unit,
+    onTogglePreview: () -> Unit,
     onTogglePin: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -73,16 +80,31 @@ internal fun EditorTopBar(
             }
         },
         actions = {
-            IconButton(onClick = onUndo, enabled = canUndo) {
-                Icon(UndoIcon, contentDescription = "Undo")
+            // Undo, Redo and Find work on the text field, which is not there in the preview
+            if (!previewMode) {
+                IconButton(onClick = onUndo, enabled = canUndo) {
+                    Icon(UndoIcon, contentDescription = "Undo")
+                }
+                IconButton(onClick = onRedo, enabled = canRedo) {
+                    Icon(RedoIcon, contentDescription = "Redo")
+                }
+                // Find in note: only when there is some text to look in
+                if (bodyText.isNotEmpty()) {
+                    IconButton(onClick = onFind) {
+                        Icon(Icons.Default.Search, contentDescription = "Find in note")
+                    }
+                }
             }
-            IconButton(onClick = onRedo, enabled = canRedo) {
-                Icon(RedoIcon, contentDescription = "Redo")
-            }
-            // Find in note: only when there is some text to look in
-            if (bodyText.isNotEmpty()) {
-                IconButton(onClick = onFind) {
-                    Icon(Icons.Default.Search, contentDescription = "Find in note")
+            // Preview (an eye): the note as a reading page, with the formatting marks hidden. In the
+            // preview the button is a pencil that goes back to editing. Only when there is some
+            // text to show.
+            if (previewMode || bodyText.isNotEmpty()) {
+                IconButton(onClick = onTogglePreview) {
+                    if (previewMode) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit note")
+                    } else {
+                        Icon(PreviewIcon, contentDescription = "Preview note")
+                    }
                 }
             }
             // Pin: a solid blue pin when the note is pinned, a line pin when it is not
