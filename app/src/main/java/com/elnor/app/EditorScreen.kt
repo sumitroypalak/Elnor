@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -54,6 +55,9 @@ fun EditorScreen(
         mutableStateOf(TextFieldValue(text, TextRange(text.length)))
     }
     var confirmLeaveUnsaved by rememberSaveable { mutableStateOf(false) }
+    // Preview: the note as a reading page, with the formatting marks hidden. It only changes what
+    // is shown, never the note. Every note page starts in the editor.
+    var previewMode by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val bodyFocus = remember { FocusRequester() }
     val context = LocalContext.current
@@ -146,6 +150,27 @@ fun EditorScreen(
         findOpen = false
         findQuery = ""
         findCurrent = 0
+    }
+
+    // Preview on / off. Going into the preview closes the Find bar and the keyboard first, because
+    // the text field is not there any more (and the formatting buttons follow its focus).
+    val focusManager = LocalFocusManager.current
+    fun togglePreview() {
+        haptic(HapticKind.TICK)
+        if (!previewMode) {
+            closeFind()
+            bodyFocused = false
+            focusManager.clearFocus(force = true)
+        }
+        previewMode = !previewMode
+    }
+
+    // A tap on a link in the preview. The dialer / browser is not "leaving" Elnor (see AppLock).
+    val openPreviewLink = remember(context) {
+        { link: LinkSpan ->
+            AppLock.expectExternalScreen()
+            openLink(context, link)
+        }
     }
 
     // The delete button is only shown when the note exists in storage
@@ -271,6 +296,7 @@ fun EditorScreen(
                 canPin = canPin,
                 pinned = pinned,
                 canDelete = canDelete,
+                previewMode = previewMode,
                 onBack = { saveAndClose() },
                 onUndo = {
                     haptic(HapticKind.TICK)
@@ -281,6 +307,7 @@ fun EditorScreen(
                     showSnapshot(viewModel.redo())
                 },
                 onFind = { findOpen = true },
+                onTogglePreview = { togglePreview() },
                 onTogglePin = { togglePin() },
                 onDelete = { deleteAndClose() }
             )
@@ -346,7 +373,9 @@ fun EditorScreen(
                 },
                 bodyFocus = bodyFocus,
                 onBodyFocusChange = { bodyFocused = it },
-                textStyling = textStyling
+                textStyling = textStyling,
+                previewMode = previewMode,
+                onOpenLink = openPreviewLink
             )
 
             Spacer(Modifier.height(8.dp))
