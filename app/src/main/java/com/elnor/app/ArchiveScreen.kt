@@ -1,24 +1,30 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 
 package com.elnor.app
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterExitState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,6 +42,10 @@ import kotlinx.coroutines.launch
  *    is edited.
  *  - A note can be unarchived (it goes back to the home list exactly as it was, also pinned if it
  *    was pinned) or deleted (it goes to the Trash).
+ *  - Many notes at once: touch and hold a note, then tap more notes. The bar at the top then has
+ *    "Unarchive" and a delete button for all selected notes, and "Select all" in its three-dot
+ *    menu. Back or the X ends the selection. "Unarchive all" in the normal bar brings back every
+ *    note (it is only shown while the search box is empty).
  *
  * Changes are sent through [ApplicationScope], like saves in the editor, so leaving this page at
  * the same moment cannot cancel them half-way. The editor is the same [editorViewModel] as on the
@@ -52,6 +62,8 @@ internal fun ArchiveScreen(
     // null until the first list is read, so "Archive is empty" does not flash on the screen
     val archived by repository.archivedNotes.collectAsState<List<Note>, List<Note>?>(initial = null)
     var query by rememberSaveable { mutableStateOf("") }
+    // The notes chosen by touch and hold (empty: not selecting)
+    var selectedIds by rememberSaveable { mutableStateOf(setOf<Long>()) }
     // The note that is open in the editor (by id). Kept when the screen is recreated.
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     // The "moved to Trash" message with Undo. The host and the scope are here, above the animation,
@@ -77,7 +89,12 @@ internal fun ArchiveScreen(
             leaving = transition.targetState == EnterExitState.PostExit,
             query = query,
             onQueryChange = { query = it },
-            onOpenNote = { editingId = it },
+            selectedIds = selectedIds,
+            onSelectedChange = { selectedIds = it },
+            onOpenNote = {
+                selectedIds = emptySet()
+                editingId = it
+            },
             onCloseEditor = { editingId = null },
             onBack = onBack,
             snackbarHostState = snackbarHostState,
@@ -96,6 +113,8 @@ private fun ArchiveContent(
     leaving: Boolean,
     query: String,
     onQueryChange: (String) -> Unit,
+    selectedIds: Set<Long>,
+    onSelectedChange: (Set<Long>) -> Unit,
     onOpenNote: (Long) -> Unit,
     onCloseEditor: () -> Unit,
     onBack: () -> Unit,
@@ -103,6 +122,8 @@ private fun ArchiveContent(
     uiScope: CoroutineScope
 ) {
     val bgColor = MaterialTheme.colorScheme.background
+    // Light vibrations (follow Settings > Haptic feedback)
+    val haptic = rememberHaptic()
 
     if (openId != null) {
         val editing = notes?.firstOrNull { it.id == openId }
@@ -146,23 +167,90 @@ private fun ArchiveContent(
     val shown = remember(notes, query) {
         notes?.filter { SearchText.matches(it.title, it.body, query) }
     }
+    // The selected notes that are on the screen now. A selected note that the search hides, or
+    // that left the Archive, is not counted and no button works on it.
+    val selection = remember(shown, selectedIds) {
+        shown?.filter { it.id in selectedIds } ?: emptyList()
+    }
+    val selecting = selection.isNotEmpty()
+    // Back ends the selection first (and not while the page is already sliding out)
+    BackHandler(enabled = selecting && !leaving) { onSelectedChange(emptySet()) }
 
     Scaffold(
         containerColor = bgColor,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text("Archive", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
+            if (selecting) {
+                BulkSelectionTopBar(
+                    count = selection.size,
+                    containerColor = bgColor,
+                    onClose = { onSelectedChange(emptySet()) },
+                    onSelectAll = { onSelectedChange(shown.orEmpty().map { it.id }.toSet()) }
+                ) {
+                    TextButton(
+                        onClick = {
+                            val ids = selection.map { it.id }
+                            onSelectedChange(emptySet())
+                            haptic(HapticKind.CONFIRM)
+                            ApplicationScope.scope.launch { repository.unarchiveMany(ids) }
+                            showPlainMessage(
+                                uiScope,
+                                snackbarHostState,
+                                unarchivedMessage(ids.size)
+                            )
+                        }
+                    ) {
+                        Text("Unarchive")
+                    }
+                    // No question: to the Trash at once, with Undo
+                    IconButton(
+                        onClick = {
+                            val chosen = selection
+                            onSelectedChange(emptySet())
+                            haptic(HapticKind.CONFIRM)
+                            deleteNotesWithUndo(uiScope, snackbarHostState, repository, chosen)
+                        }
+                    ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            Icons.Default.Delete,
+                            contentDescription = "Delete selected notes",
+                            tint = MaterialTheme.colorScheme.error
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
-            )
+                }
+            } else {
+                TopAppBar(
+                    title = { Text("Archive", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    },
+                    actions = {
+                        // Only while the search box is empty: "all" then really means all notes
+                        if (!notes.isNullOrEmpty() && query.isBlank()) {
+                            TextButton(
+                                onClick = {
+                                    val ids = notes.map { it.id }
+                                    haptic(HapticKind.CONFIRM)
+                                    ApplicationScope.scope.launch { repository.unarchiveMany(ids) }
+                                    showPlainMessage(
+                                        uiScope,
+                                        snackbarHostState,
+                                        unarchivedMessage(ids.size)
+                                    )
+                                }
+                            ) {
+                                Text("Unarchive all")
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
+                )
+            }
         }
     ) { padding ->
         Column(
@@ -228,7 +316,8 @@ private fun ArchiveContent(
                         item {
                             Text(
                                 "Archived notes are kept here and stay out of your list. " +
-                                    "Tap a note to open and edit it.",
+                                    "Tap a note to open and edit it. Touch and hold a note " +
+                                    "to select many.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
                             )
@@ -237,7 +326,21 @@ private fun ArchiveContent(
                     items(shown, key = { it.id }) { note ->
                         ArchivedNoteCard(
                             note = note,
-                            onOpen = { onOpenNote(note.id) },
+                            selectionMode = selecting,
+                            selected = selecting && note.id in selectedIds,
+                            // While selecting, a tap selects or unselects instead of opening
+                            onClick = {
+                                if (selecting) {
+                                    haptic(HapticKind.TICK)
+                                    onSelectedChange(toggleSelection(selectedIds, note.id))
+                                } else {
+                                    onOpenNote(note.id)
+                                }
+                            },
+                            onLongClick = {
+                                haptic(HapticKind.LONG_PRESS)
+                                onSelectedChange(selectedIds + note.id)
+                            },
                             onUnarchive = {
                                 ApplicationScope.scope.launch {
                                     repository.unarchiveMany(listOf(note.id))
@@ -281,63 +384,95 @@ private fun ColumnScope.EmptyMessage(title: String, subtitle: String) {
     }
 }
 
-/** One archived note. Tapping the card opens it in the editor. */
+/**
+ * One archived note. Tapping the card calls [onClick] (open it, or select it while notes are being
+ * selected); touch and hold calls [onLongClick]. While selecting ([selectionMode]) the Delete /
+ * Unarchive buttons of the card are hidden. A [selected] card has a border and a check mark.
+ */
 @Composable
 private fun ArchivedNoteCard(
     note: Note,
-    onOpen: () -> Unit,
+    selectionMode: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onUnarchive: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val shape = MaterialTheme.shapes.extraLarge
+
+    // Not Card(onClick = ...): that one has no long press. The clip makes the press ripple round.
     Card(
-        onClick = onOpen,
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = shape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 0.dp
-        )
+        ),
+        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
     ) {
-        Column(
-            Modifier.padding(start = 20.dp, top = 20.dp, end = 12.dp, bottom = 8.dp)
-        ) {
-            Text(
-                getListTitle(note),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            val preview = MarkdownFormat.plainText(getPreviewBody(note))
-            if (preview.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.padding(start = 20.dp, top = 20.dp, end = 12.dp, bottom = 8.dp)
+            ) {
                 Text(
-                    preview,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    maxLines = 3,
+                    getListTitle(note),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    // keeps the title out from under the check mark
+                    modifier = if (selected) Modifier.padding(end = 32.dp) else Modifier,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                val preview = MarkdownFormat.plainText(getPreviewBody(note))
+                if (preview.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        preview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "Archived " + formatNoteDate(note.archivedAt ?: note.updatedAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                )
+                if (selectionMode) {
+                    Spacer(Modifier.height(12.dp))
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDelete) {
+                            Text("Delete", color = MaterialTheme.colorScheme.error)
+                        }
+                        TextButton(onClick = onUnarchive) {
+                            Text("Unarchive")
+                        }
+                    }
+                }
             }
-            Spacer(Modifier.height(14.dp))
-            Text(
-                "Archived " + formatNoteDate(note.archivedAt ?: note.updatedAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onDelete) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-                TextButton(onClick = onUnarchive) {
-                    Text("Unarchive")
-                }
+
+            if (selected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 16.dp, end = 16.dp)
+                )
             }
         }
     }
