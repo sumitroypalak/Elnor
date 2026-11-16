@@ -101,8 +101,10 @@ fun EditorScreen(
     }
     // The chosen place. Kept inside the list, because the text can get shorter while typing.
     val findIndex = if (findMatches.isEmpty()) -1 else findCurrent.coerceIn(0, findMatches.lastIndex)
-    val textStyling = remember(links, formatSpans, linkColor, markerColor, findMatches, findIndex) {
-        NoteTextTransformation(links, formatSpans, linkColor, markerColor, findMatches, findIndex)
+    // Tags (#work) in the text are shown in the link colour (see Tags.kt)
+    val tags = remember(bodyValue.text) { TagDetector.find(bodyValue.text) }
+    val textStyling = remember(links, formatSpans, tags, linkColor, markerColor, findMatches, findIndex) {
+        NoteTextTransformation(links, formatSpans, linkColor, markerColor, findMatches, findIndex, tags)
     }
     var bodyFocused by remember { mutableStateOf(false) }
     val cursor = bodyValue.selection

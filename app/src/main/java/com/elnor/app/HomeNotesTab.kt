@@ -68,7 +68,11 @@ internal fun NotesTabContent(
     onPickRecent: (String) -> Unit,
     onRemoveRecent: (String) -> Unit,
     onClearRecents: () -> Unit,
+    tags: List<TagCount>,
+    selectedTag: String?,
+    onToggleTag: (String) -> Unit,
     shownNotes: List<Note>,
+    filtering: Boolean,
     notesLoaded: Boolean,
     sort: NotesSort,
     onSortChange: (NotesSort) -> Unit,
@@ -107,6 +111,12 @@ internal fun NotesTabContent(
             onClearRecents = onClearRecents
         )
 
+        // The tags of the notes: a tap shows only the notes that have that tag
+        if (tags.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            TagChipsRow(tags = tags, selected = selectedTag, onToggle = onToggleTag)
+        }
+
         Spacer(Modifier.height(12.dp))
 
         NotesHeaderRow(
@@ -120,7 +130,7 @@ internal fun NotesTabContent(
         Spacer(Modifier.height(8.dp))
 
         NotesBody(
-            search = search,
+            filtering = filtering,
             shownNotes = shownNotes,
             notesLoaded = notesLoaded,
             viewMode = viewMode,
@@ -304,7 +314,7 @@ private fun NotesHeaderRow(
  */
 @Composable
 private fun ColumnScope.NotesBody(
-    search: String,
+    filtering: Boolean,
     shownNotes: List<Note>,
     notesLoaded: Boolean,
     viewMode: NotesViewMode,
@@ -315,7 +325,7 @@ private fun ColumnScope.NotesBody(
     noteItem: @Composable (Note, Modifier) -> Unit
 ) {
     val pane = when {
-        !notesLoaded && search.isBlank() -> NotesPane.LOADING
+        !notesLoaded && !filtering -> NotesPane.LOADING
         shownNotes.isEmpty() -> NotesPane.EMPTY
         else -> NotesPane.NOTES
     }
@@ -342,7 +352,7 @@ private fun ColumnScope.NotesBody(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    if (search.isBlank()) "Your space is empty"
+                    if (!filtering) "Your space is empty"
                     else "No notes found",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
@@ -350,7 +360,7 @@ private fun ColumnScope.NotesBody(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    if (search.isBlank())
+                    if (!filtering)
                         "Tap + to capture your first thought."
                     else "Try searching with another word.",
                     style = MaterialTheme.typography.bodyMedium,
