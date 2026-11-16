@@ -121,8 +121,8 @@ private fun PreviewBlockView(
 }
 
 /**
- * The text of one block: bold words in bold letters, and every link in the link colour with an
- * underline that opens when it is tapped.
+ * The text of one block: bold words in bold letters, every tag (#work) in the link colour, and
+ * every link in the link colour with an underline that opens when it is tapped.
  */
 private fun previewText(
     block: PreviewBlock,
@@ -133,6 +133,10 @@ private fun previewText(
         if (run.bold) pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
         append(run.text)
         if (run.bold) pop()
+    }
+    for (tag in block.tags) {
+        if (tag.start >= tag.end || tag.end > length) continue
+        addStyle(SpanStyle(color = linkColor), tag.start, tag.end)
     }
     val linkStyles = TextLinkStyles(
         style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)

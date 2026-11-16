@@ -11,14 +11,16 @@ enum class PreviewKind { BLANK, PARAGRAPH, HEADING1, HEADING2, BULLET, NUMBERED 
  * [level] is how deep a list item sits (0 for the first level). [label] is what is drawn before a
  * list item: a bullet sign or the number as it was typed ("3."); empty for every other kind.
  * [runs] is the text without the formatting marks. [links] are the web links, e-mail addresses and
- * phone numbers of that text; their positions are positions in [text] (the runs put together).
+ * phone numbers of that text, and [tags] its tags (#work); their positions are positions in [text]
+ * (the runs put together).
  */
 data class PreviewBlock(
     val kind: PreviewKind,
     val level: Int,
     val label: String,
     val runs: List<PreviewRun>,
-    val links: List<LinkSpan>
+    val links: List<LinkSpan>,
+    val tags: List<TagSpan> = emptyList()
 ) {
     /** The text of the line without any mark. */
     val text: String get() = runs.joinToString("") { it.text }
@@ -69,18 +71,19 @@ object MarkdownPreview {
         val runs = MarkdownFormat.boldRuns(block.content.trim()).map { PreviewRun(it.first, it.second) }
         val plain = runs.joinToString("") { it.text }
         val links = LinkDetector.find(plain)
+        val tags = TagDetector.find(plain)
         val level = (block.indent / 2).coerceAtMost(MAX_LEVEL)
         return when (block.kind) {
             MarkdownFormat.BlockKind.HEADING1 ->
-                PreviewBlock(PreviewKind.HEADING1, 0, "", runs, links)
+                PreviewBlock(PreviewKind.HEADING1, 0, "", runs, links, tags)
             MarkdownFormat.BlockKind.HEADING2 ->
-                PreviewBlock(PreviewKind.HEADING2, 0, "", runs, links)
+                PreviewBlock(PreviewKind.HEADING2, 0, "", runs, links, tags)
             MarkdownFormat.BlockKind.BULLET ->
-                PreviewBlock(PreviewKind.BULLET, level, if (level % 2 == 0) "•" else "◦", runs, links)
+                PreviewBlock(PreviewKind.BULLET, level, if (level % 2 == 0) "•" else "◦", runs, links, tags)
             MarkdownFormat.BlockKind.NUMBERED ->
-                PreviewBlock(PreviewKind.NUMBERED, level, block.number + ".", runs, links)
+                PreviewBlock(PreviewKind.NUMBERED, level, block.number + ".", runs, links, tags)
             MarkdownFormat.BlockKind.PARAGRAPH ->
-                PreviewBlock(PreviewKind.PARAGRAPH, 0, "", runs, links)
+                PreviewBlock(PreviewKind.PARAGRAPH, 0, "", runs, links, tags)
         }
     }
 }

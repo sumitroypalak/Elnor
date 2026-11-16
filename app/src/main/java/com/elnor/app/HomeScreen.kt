@@ -135,7 +135,25 @@ fun ElnorApp(
     var sort by remember { mutableStateOf(loadNotesSort(context)) }
     // Pinned notes first, then the order the user chose. The database gives the notes newest
     // first; this puts them in the chosen order.
-    val shownNotes = remember(visibleNotes, sort) { sortNotes(visibleNotes, sort) }
+    // ---- Tags ----
+    // The tag buttons under the search field (see Tags.kt). A tapped tag shows only the notes that
+    // have it. It is kept as the key of the tag, and it works together with the search text.
+    var selectedTag by rememberSaveable { mutableStateOf<String?>(null) }
+    // Counted from the notes of the home list (not the Archive, not the Trash)
+    val tagCounts = remember(notes) { Tags.summarize(notes) }
+    // A tag that no note has any more (the last note with it was changed, archived or deleted) is
+    // not selected any more. Only checked when the notes are really loaded, so a tag that is
+    // restored after rotation is not lost.
+    LaunchedEffect(tagCounts, notesLoaded) {
+        val tag = selectedTag
+        if (notesLoaded && tag != null && tagCounts.none { it.key == tag }) selectedTag = null
+    }
+
+    val shownNotes = remember(visibleNotes, sort, selectedTag) {
+        val sorted = sortNotes(visibleNotes, sort)
+        val tag = selectedTag
+        if (tag == null) sorted else sorted.filter { Tags.has(it, tag) }
+    }
 
     // ---- Selecting notes (touch and hold a note) ----
     // The ids of the selected notes (by id, never by list position). Kept when the screen is
@@ -413,7 +431,16 @@ fun ElnorApp(
                                 recentSearches = emptyList()
                                 saveRecentSearches(context, emptyList())
                             },
+                            tags = tagCounts,
+                            selectedTag = selectedTag,
+                            onToggleTag = { key ->
+                                haptic(HapticKind.TICK)
+                                // A new filter ends the selection, like a new search does
+                                selectedIds = emptySet()
+                                selectedTag = if (key == selectedTag) null else key
+                            },
                             shownNotes = shownNotes,
+                            filtering = search.isNotBlank() || selectedTag != null,
                             notesLoaded = notesLoaded,
                             sort = sort,
                             onSortChange = { option ->

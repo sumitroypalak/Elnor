@@ -39,10 +39,10 @@ private val FOUND_CURRENT_STYLE = SpanStyle(background = Color(0xFFFFA726), colo
 
 /**
  * Shows the text of a note styled while it is edited: the links in the link colour with an
- * underline, and the formatting ([MarkdownFormat]): bold words, bigger headings, and the marks
- * (** # - 1.) dimmed. It only changes how the text looks: the text itself, the cursor and the
- * selection stay exactly as they are (the offsets are the same before and after), so typing and
- * saving are not affected.
+ * underline, the tags (#work) in the link colour without an underline, and the formatting
+ * ([MarkdownFormat]): bold words, bigger headings, and the marks (** # - 1.) dimmed. It only
+ * changes how the text looks: the text itself, the cursor and the selection stay exactly as they
+ * are (the offsets are the same before and after), so typing and saving are not affected.
  */
 class NoteTextTransformation(
     private val links: List<LinkSpan>,
@@ -52,19 +52,25 @@ class NoteTextTransformation(
     /** The places found by "Find in note": coloured with a background. Empty when Find is closed. */
     private val found: List<FindInNote.Match> = emptyList(),
     /** Which of [found] is the chosen one (a stronger colour), or -1. */
-    private val foundCurrent: Int = -1
+    private val foundCurrent: Int = -1,
+    /** The tags of the text (see [TagDetector]): shown in the link colour. */
+    private val tags: List<TagSpan> = emptyList()
 ) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
-        if (links.isEmpty() && format.isEmpty() && found.isEmpty()) {
+        if (links.isEmpty() && format.isEmpty() && found.isEmpty() && tags.isEmpty()) {
             return TransformedText(text, OffsetMapping.Identity)
         }
         val linkStyle = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
+        val tagStyle = SpanStyle(color = linkColor)
         val styled = buildAnnotatedString {
             append(text)
             // Never go past the text, in case the text changed since the spans were calculated
             for (span in format) {
                 if (span.start >= span.end || span.end > text.length) continue
                 addStyle(formatStyle(span.kind), span.start, span.end)
+            }
+            for (tag in tags) {
+                if (tag.start < tag.end && tag.end <= text.length) addStyle(tagStyle, tag.start, tag.end)
             }
             for (link in links) {
                 if (link.end <= text.length) addStyle(linkStyle, link.start, link.end)
