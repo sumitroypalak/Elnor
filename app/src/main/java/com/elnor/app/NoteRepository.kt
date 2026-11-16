@@ -117,8 +117,18 @@ interface NoteRepository {
         if (pinned.isNotEmpty()) setPinnedMany(pinned, true)
     }
 
+    /** [restore] for many notes at once. Ids that are not in the Trash are skipped. */
+    suspend fun restoreMany(ids: List<Long>) {
+        for (id in ids) restore(id)
+    }
+
     /** Removes the note for good. Only for notes that the user deletes from the Trash. */
     suspend fun deletePermanently(id: Long)
+
+    /** [deletePermanently] for many notes at once. Only for notes the user deletes from the Trash. */
+    suspend fun deletePermanentlyMany(ids: List<Long>) {
+        for (id in ids) deletePermanently(id)
+    }
 
     /** Removes every note in the Trash for good. */
     suspend fun emptyTrash()
