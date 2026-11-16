@@ -47,9 +47,13 @@ internal fun NoteListItem(
 
 /**
  * The three-dot menu of one note card. An archived note (a search result) can be unarchived or
- * deleted; a normal note can be pinned / unpinned, archived or deleted. [onArchive] and [onDelete]
- * are done by the home screen (they show the message with "Undo"); pin and unarchive go straight
- * to the [repository].
+ * deleted; a normal note can be pinned / unpinned, archived, duplicated or deleted. [onArchive] and
+ * [onDelete] are done by the home screen (they show the message with "Undo"); pin, duplicate and
+ * unarchive go straight to the [repository].
+ *
+ * "Duplicate" stores a copy of the note (see [duplicateOf]). The copy is a new, normal note and
+ * the newest one, so with the default sort it appears at the top of the list, under the pinned
+ * notes.
  */
 internal fun noteMenuActions(
     note: Note,
@@ -93,6 +97,17 @@ internal fun noteMenuActions(
             NoteMenuAction(
                 label = "Archive",
                 onClick = onArchive
+            ),
+            // Runs in ApplicationScope, like every other change, so leaving the screen at the same
+            // moment cannot cancel it half-way
+            NoteMenuAction(
+                label = "Duplicate",
+                onClick = {
+                    haptic(HapticKind.CONFIRM)
+                    ApplicationScope.scope.launch {
+                        repository.insert(duplicateOf(note, System.currentTimeMillis()))
+                    }
+                }
             ),
             deleteAction
         )
