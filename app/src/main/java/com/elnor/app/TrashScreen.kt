@@ -1,25 +1,27 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 
 package com.elnor.app
 
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.compose.foundation.background
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,6 +35,13 @@ import kotlinx.coroutines.launch
  * restored (it goes back to the notes list exactly as it was) or deleted for good, and
  * "Empty trash" deletes all of them for good. Notes in the Trash are not shown on the home
  * screen or in the search.
+ *
+ * Many notes at once:
+ *  - Touch and hold a note, then tap more notes. The bar at the top then has "Restore" and a
+ *    delete button for all selected notes, and "Select all" in its three-dot menu. Back or the X
+ *    ends the selection.
+ *  - "Restore all" in the normal bar takes every note out of the Trash.
+ * Deleting for good always asks first, because that cannot be undone. Restoring does not ask.
  *
  * Changes are sent through [ApplicationScope], like saves in the editor, so leaving this page
  * at the same moment cannot cancel them half-way.
@@ -48,6 +57,9 @@ internal fun TrashScreen(
     // rememberSaveable: the dialogs stay open if the screen is recreated (for example rotation)
     var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     var confirmEmpty by rememberSaveable { mutableStateOf(false) }
+    var confirmDeleteSelected by rememberSaveable { mutableStateOf(false) }
+    // The notes chosen by touch and hold (empty: not selecting)
+    var selectedIds by rememberSaveable { mutableStateOf(setOf<Long>()) }
     val notes = trashed
     // The time chosen in Settings > Trash (30 days if never changed)
     val context = LocalContext.current
@@ -57,6 +69,16 @@ internal fun TrashScreen(
     val trashDays = trashRetention.days
     // Taken once when the page opens: "days left" does not need to change while it is on screen
     val now = remember { System.currentTimeMillis() }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val uiScope = rememberCoroutineScope()
+
+    // Only notes that are still in the Trash count (one can leave it while selected, for example
+    // when its time is over)
+    val selection = remember(notes, selectedIds) {
+        notes?.filter { it.id in selectedIds }?.map { it.id } ?: emptyList()
+    }
+    val selecting = selection.isNotEmpty()
+    BackHandler(enabled = selecting) { selectedIds = emptySet() }
 
     // Opening the Trash also removes the notes that have been here for the chosen time. The list
     // updates by itself when they are gone.
@@ -66,26 +88,70 @@ internal fun TrashScreen(
 
     Scaffold(
         containerColor = bgColor,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text("Trash", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
+            if (selecting) {
+                BulkSelectionTopBar(
+                    count = selection.size,
+                    containerColor = bgColor,
+                    onClose = { selectedIds = emptySet() },
+                    onSelectAll = { selectedIds = notes.orEmpty().map { it.id }.toSet() }
+                ) {
+                    TextButton(
+                        onClick = {
+                            val ids = selection
+                            selectedIds = emptySet()
+                            haptic(HapticKind.CONFIRM)
+                            ApplicationScope.scope.launch { repository.restoreMany(ids) }
+                            showPlainMessage(uiScope, snackbarHostState, restoredMessage(ids.size))
+                        }
+                    ) {
+                        Text("Restore")
+                    }
+                    IconButton(onClick = { confirmDeleteSelected = true }) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            Icons.Default.Delete,
+                            contentDescription = "Delete selected notes forever",
+                            tint = MaterialTheme.colorScheme.error
                         )
                     }
-                },
-                actions = {
-                    if (!notes.isNullOrEmpty()) {
-                        TextButton(onClick = { confirmEmpty = true }) {
-                            Text("Empty trash", color = MaterialTheme.colorScheme.error)
+                }
+            } else {
+                TopAppBar(
+                    title = { Text("Trash", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back"
+                            )
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
-            )
+                    },
+                    actions = {
+                        if (!notes.isNullOrEmpty()) {
+                            // No question: nothing is lost by restoring
+                            TextButton(
+                                onClick = {
+                                    val ids = notes.map { it.id }
+                                    haptic(HapticKind.CONFIRM)
+                                    ApplicationScope.scope.launch { repository.restoreMany(ids) }
+                                    showPlainMessage(
+                                        uiScope,
+                                        snackbarHostState,
+                                        restoredMessage(ids.size)
+                                    )
+                                }
+                            ) {
+                                Text("Restore all")
+                            }
+                            TextButton(onClick = { confirmEmpty = true }) {
+                                Text("Empty trash", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
+                )
+            }
         }
     ) { padding ->
         when {
@@ -134,7 +200,8 @@ internal fun TrashScreen(
                 item {
                     Text(
                         "Notes are deleted for good $trashDays days after they were " +
-                            "moved here. Tap a note to read all of it.",
+                            "moved here. Tap a note to read all of it. Touch and hold " +
+                            "a note to select many.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
                     )
@@ -144,6 +211,16 @@ internal fun TrashScreen(
                         note = note,
                         now = now,
                         retentionMs = trashRetention.millis,
+                        selectionMode = selecting,
+                        selected = selecting && note.id in selectedIds,
+                        onToggleSelect = {
+                            haptic(HapticKind.TICK)
+                            selectedIds = toggleSelection(selectedIds, note.id)
+                        },
+                        onLongClick = {
+                            haptic(HapticKind.LONG_PRESS)
+                            selectedIds = selectedIds + note.id
+                        },
                         onRestore = {
                             haptic(HapticKind.CONFIRM)
                             ApplicationScope.scope.launch { repository.restore(note.id) }
@@ -180,6 +257,33 @@ internal fun TrashScreen(
         )
     }
 
+    // The selected notes, deleted for good (always asks, it cannot be undone)
+    if (confirmDeleteSelected) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteSelected = false },
+            title = { Text("Delete forever?", fontWeight = FontWeight.Bold) },
+            text = { Text(deleteForeverQuestion(selection.size)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDeleteSelected = false
+                        val ids = selection
+                        selectedIds = emptySet()
+                        haptic(HapticKind.CONFIRM)
+                        ApplicationScope.scope.launch { repository.deletePermanentlyMany(ids) }
+                    }
+                ) {
+                    Text("Delete forever", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteSelected = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     if (confirmEmpty) {
         AlertDialog(
             onDismissRequest = { confirmEmpty = false },
@@ -210,77 +314,113 @@ internal fun TrashScreen(
 /**
  * One note in the Trash. Tapping the card shows the whole note (it is cut to a few lines
  * otherwise), so the user can read it before restoring it or deleting it for good.
+ *
+ * While notes are being selected ([selectionMode]) a tap selects or unselects the note instead,
+ * and the Restore / Delete forever buttons of the card are hidden, so a button is not pressed by
+ * mistake. Touch and hold calls [onLongClick]. A [selected] card has a border and a check mark,
+ * like on the home screen.
  */
 @Composable
 private fun TrashNoteCard(
     note: Note,
     now: Long,
     retentionMs: Long,
+    selectionMode: Boolean,
+    selected: Boolean,
+    onToggleSelect: () -> Unit,
+    onLongClick: () -> Unit,
     onRestore: () -> Unit,
     onDeleteForever: () -> Unit
 ) {
     var expanded by rememberSaveable(note.id) { mutableStateOf(false) }
+    val shape = MaterialTheme.shapes.extraLarge
 
+    // Not Card(onClick = ...): that one has no long press. The clip makes the press ripple round.
     Card(
-        onClick = { expanded = !expanded },
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .combinedClickable(
+                onClick = { if (selectionMode) onToggleSelect() else expanded = !expanded },
+                onLongClick = onLongClick
+            ),
+        shape = shape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 0.dp
-        )
+        ),
+        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
     ) {
-        Column(
-            Modifier.padding(start = 20.dp, top = 20.dp, end = 12.dp, bottom = 8.dp)
-        ) {
-            Text(
-                getListTitle(note),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = if (expanded) Int.MAX_VALUE else 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            val preview = MarkdownFormat.plainText(getPreviewBody(note))
-            if (preview.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.padding(start = 20.dp, top = 20.dp, end = 12.dp, bottom = 8.dp)
+            ) {
                 Text(
-                    preview,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    maxLines = if (expanded) Int.MAX_VALUE else 3,
+                    getListTitle(note),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    // keeps the title out from under the check mark
+                    modifier = if (selected) Modifier.padding(end = 32.dp) else Modifier,
+                    maxLines = if (expanded) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                val preview = MarkdownFormat.plainText(getPreviewBody(note))
+                if (preview.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        preview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                        maxLines = if (expanded) Int.MAX_VALUE else 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "Deleted " + formatNoteDate(note.deletedAt ?: note.updatedAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                )
+                // How long the note can still be restored. Red when 3 days or less are left.
+                val deletedAt = note.deletedAt ?: note.updatedAt
+                val urgent = TrashDaysLeft.isUrgent(deletedAt, now, retentionMs)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    TrashDaysLeft.label(deletedAt, now, retentionMs),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (urgent) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (urgent) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                )
+                if (selectionMode) {
+                    Spacer(Modifier.height(12.dp))
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDeleteForever) {
+                            Text("Delete forever", color = MaterialTheme.colorScheme.error)
+                        }
+                        TextButton(onClick = onRestore) {
+                            Text("Restore")
+                        }
+                    }
+                }
             }
-            Spacer(Modifier.height(14.dp))
-            Text(
-                "Deleted " + formatNoteDate(note.deletedAt ?: note.updatedAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-            )
-            // How long the note can still be restored. Red when 3 days or less are left.
-            val deletedAt = note.deletedAt ?: note.updatedAt
-            val urgent = TrashDaysLeft.isUrgent(deletedAt, now, retentionMs)
-            Spacer(Modifier.height(2.dp))
-            Text(
-                TrashDaysLeft.label(deletedAt, now, retentionMs),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (urgent) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (urgent) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onDeleteForever) {
-                    Text("Delete forever", color = MaterialTheme.colorScheme.error)
-                }
-                TextButton(onClick = onRestore) {
-                    Text("Restore")
-                }
+
+            if (selected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 16.dp, end = 16.dp)
+                )
             }
         }
     }
