@@ -3,7 +3,7 @@ package com.elnor.app
 /** A piece of the text of a preview line. [bold] pieces are shown in bold letters. */
 data class PreviewRun(val text: String, val bold: Boolean)
 
-enum class PreviewKind { BLANK, PARAGRAPH, HEADING1, HEADING2, BULLET, NUMBERED }
+enum class PreviewKind { BLANK, PARAGRAPH, HEADING1, HEADING2, BULLET, NUMBERED, CHECKLIST }
 
 /**
  * One line of the preview, ready to be drawn.
@@ -13,6 +13,10 @@ enum class PreviewKind { BLANK, PARAGRAPH, HEADING1, HEADING2, BULLET, NUMBERED 
  * [runs] is the text without the formatting marks. [links] are the web links, e-mail addresses and
  * phone numbers of that text, and [tags] its tags (#work); their positions are positions in [text]
  * (the runs put together).
+ *
+ * For a checklist item [checked] tells if the box is ticked, and [lineIndex] is the number of its
+ * line in the note (counted from 0), which [MarkdownFormat.toggleCheck] needs to tick it. It is -1
+ * for the blocks that are not checklist items.
  */
 data class PreviewBlock(
     val kind: PreviewKind,
@@ -20,7 +24,9 @@ data class PreviewBlock(
     val label: String,
     val runs: List<PreviewRun>,
     val links: List<LinkSpan>,
-    val tags: List<TagSpan> = emptyList()
+    val tags: List<TagSpan> = emptyList(),
+    val checked: Boolean = false,
+    val lineIndex: Int = -1
 ) {
     /** The text of the line without any mark. */
     val text: String get() = runs.joinToString("") { it.text }
@@ -35,6 +41,8 @@ data class PreviewBlock(
  *  - A line that starts with "#" is a big heading, "##" (or more) a smaller one.
  *  - A line that starts with "- " or "* " is a bullet item, "1. " a numbered item. Spaces in front
  *    of the mark make the item sit one level deeper for every two spaces (at most [MAX_LEVEL]).
+ *  - A line that starts with "- [ ] " is a checklist item with an empty box, "- [x] " one with a
+ *    ticked box.
  *  - **bold** words are bold, the ** are not shown.
  *  - Blank lines: one blank line stays as a small gap, more than one in a row count as one, and
  *    blank lines at the start and the end of the note are left out.
@@ -50,14 +58,14 @@ object MarkdownPreview {
     fun parse(text: String): List<PreviewBlock> {
         if (text.isBlank()) return emptyList()
         val blocks = ArrayList<PreviewBlock>()
-        for (rawLine in text.split('\n')) {
+        for ((lineIndex, rawLine) in text.split('\n').withIndex()) {
             val line = rawLine.trimEnd('\r')
             if (line.isBlank()) {
                 // A gap only between two lines, and never two gaps in a row
                 if (blocks.isNotEmpty() && blocks.last().kind != PreviewKind.BLANK) blocks.add(BLANK)
                 continue
             }
-            blocks.add(toBlock(line))
+            blocks.add(toBlock(line, lineIndex))
         }
         // The gap after the last line is not needed
         while (blocks.isNotEmpty() && blocks.last().kind == PreviewKind.BLANK) {
@@ -66,7 +74,7 @@ object MarkdownPreview {
         return blocks
     }
 
-    private fun toBlock(line: String): PreviewBlock {
+    private fun toBlock(line: String, lineIndex: Int): PreviewBlock {
         val block = MarkdownFormat.blockOf(line)
         val runs = MarkdownFormat.boldRuns(block.content.trim()).map { PreviewRun(it.first, it.second) }
         val plain = runs.joinToString("") { it.text }
@@ -82,6 +90,8 @@ object MarkdownPreview {
                 PreviewBlock(PreviewKind.BULLET, level, if (level % 2 == 0) "•" else "◦", runs, links, tags)
             MarkdownFormat.BlockKind.NUMBERED ->
                 PreviewBlock(PreviewKind.NUMBERED, level, block.number + ".", runs, links, tags)
+            MarkdownFormat.BlockKind.CHECKLIST ->
+                PreviewBlock(PreviewKind.CHECKLIST, level, "", runs, links, tags, block.checked, lineIndex)
             MarkdownFormat.BlockKind.PARAGRAPH ->
                 PreviewBlock(PreviewKind.PARAGRAPH, 0, "", runs, links, tags)
         }

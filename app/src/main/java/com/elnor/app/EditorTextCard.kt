@@ -54,7 +54,8 @@ internal fun ColumnScope.EditorTextCard(
     onBodyFocusChange: (Boolean) -> Unit,
     textStyling: NoteTextTransformation,
     previewMode: Boolean,
-    onOpenLink: (LinkSpan) -> Unit
+    onOpenLink: (LinkSpan) -> Unit,
+    onToggleCheck: (lineIndex: Int) -> Unit
 ) {
     val fieldColors = TextFieldDefaults.colors(
         focusedContainerColor = Color.Transparent,
@@ -137,6 +138,7 @@ internal fun ColumnScope.EditorTextCard(
                 MarkdownPreviewView(
                     text = bodyValue.text,
                     onOpenLink = onOpenLink,
+                    onToggleCheck = onToggleCheck,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)

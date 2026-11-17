@@ -45,7 +45,8 @@ internal fun ColumnScope.EditorBottomArea(
     onBold: () -> Unit,
     onHeading: () -> Unit,
     onBullet: () -> Unit,
-    onNumbered: () -> Unit
+    onNumbered: () -> Unit,
+    onChecklist: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -82,7 +83,8 @@ internal fun ColumnScope.EditorBottomArea(
                 onBold = onBold,
                 onHeading = onHeading,
                 onBullet = onBullet,
-                onNumbered = onNumbered
+                onNumbered = onNumbered,
+                onChecklist = onChecklist
             )
             // The link button fades in and out with a small zoom. While it goes out the
             // last link is still shown (the cursor has already left it).

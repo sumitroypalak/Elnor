@@ -377,7 +377,17 @@ fun EditorScreen(
                 onBodyFocusChange = { bodyFocused = it },
                 textStyling = textStyling,
                 previewMode = previewMode,
-                onOpenLink = openPreviewLink
+                onOpenLink = openPreviewLink,
+                onToggleCheck = { lineIndex ->
+                    // A tap on a box in the preview ticks or unticks that line of the text. Only
+                    // one character changes, so the cursor of the editor stays where it was.
+                    MarkdownFormat.toggleCheck(bodyValue.text, lineIndex)?.let { newText ->
+                        haptic(HapticKind.TICK)
+                        val selection = bodyValue.selection
+                        bodyValue = TextFieldValue(newText, selection)
+                        viewModel.onBodyChange(newText, selection.start, selection.end)
+                    }
+                }
             )
 
             Spacer(Modifier.height(8.dp))
@@ -393,7 +403,8 @@ fun EditorScreen(
                 onBold = { applyFormat(MarkdownFormat::toggleBold) },
                 onHeading = { applyFormat(MarkdownFormat::cycleHeading) },
                 onBullet = { applyFormat(MarkdownFormat::toggleBullet) },
-                onNumbered = { applyFormat(MarkdownFormat::toggleNumbered) }
+                onNumbered = { applyFormat(MarkdownFormat::toggleNumbered) },
+                onChecklist = { applyFormat(MarkdownFormat::toggleChecklist) }
             )
         }
     }

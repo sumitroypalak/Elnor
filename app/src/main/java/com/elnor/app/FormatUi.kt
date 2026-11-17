@@ -35,6 +35,7 @@ fun FormatToolbar(
     onHeading: () -> Unit,
     onBullet: () -> Unit,
     onNumbered: () -> Unit,
+    onChecklist: () -> Unit,
     modifier: Modifier = Modifier,
     /** A phone held sideways: less space above and below the pill. */
     compact: Boolean = false
@@ -60,6 +61,7 @@ fun FormatToolbar(
             FormatTextButton("H", "Heading", FontWeight.Bold, colors.onBar, onHeading)
             FormatIconButton(BulletListIcon, "Bullet list", colors.onBar, onBullet)
             FormatIconButton(NumberedListIcon, "Numbered list", colors.onBar, onNumbered)
+            FormatTextButton("☑", "Checklist", FontWeight.Bold, colors.onBar, onChecklist)
         }
     }
 }
