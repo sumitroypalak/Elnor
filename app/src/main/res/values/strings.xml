@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Elnor</string>
+    <string name="reminder_channel_name">Task reminders</string>
+    <string name="reminder_channel_description">A notification at the time you chose for a task</string>
+    <string name="reminder_locked_title">Task reminder</string>
+    <string name="reminder_locked_text">You have a task to do. Open Elnor to see it.</string>
 
     <!-- Launcher shortcut (touch and hold the app icon). The short label is shown under the icon. -->
     <string name="shortcut_new_note_short">New note</string>

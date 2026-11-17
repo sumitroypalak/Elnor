@@ -12,6 +12,8 @@ import androidx.room.PrimaryKey
  *   time zone: a task due on the 30th stays due on the 30th when the phone travels.
  * - [completedAt] is null for an open task. A finished task has the time it was checked off.
  *   Unchecking it sets it back to null, and nothing else of the task changes.
+ * - [remindAt] is the moment a notification is shown, in milliseconds since 1970, or null when
+ *   the task has no reminder. It is independent of [dueDate]: a task can have either or both.
  */
 @Entity(tableName = "tasks")
 data class TaskEntity(
@@ -19,7 +21,8 @@ data class TaskEntity(
     val title: String,
     val createdAt: Long,
     val dueDate: Long? = null,
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    val remindAt: Long? = null
 )
 
 /** The task as the screens see it. */
@@ -28,7 +31,8 @@ data class Task(
     val title: String,
     val createdAt: Long,
     val dueDate: Long? = null,
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    val remindAt: Long? = null
 ) {
     val isCompleted: Boolean get() = completedAt != null
 }
@@ -38,5 +42,6 @@ fun TaskEntity.toTask(): Task = Task(
     title = title,
     createdAt = createdAt,
     dueDate = dueDate,
-    completedAt = completedAt
+    completedAt = completedAt,
+    remindAt = remindAt
 )

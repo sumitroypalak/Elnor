@@ -3,23 +3,29 @@
 package com.elnor.app
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import android.text.format.DateFormat
 import java.time.LocalDate
+import java.time.ZoneId
 
 // ----------------------------- Task tab ------------------------------------
 
@@ -147,8 +153,8 @@ fun TasksScreen(
         TaskEditDialog(
             initial = null,
             today = today,
-            onSave = { title, due ->
-                ApplicationScope.scope.launch { repository.add(title, due) }
+            onSave = { title, due, remindAt ->
+                ApplicationScope.scope.launch { repository.add(title, due, remindAt) }
                 onAddDialogDismiss()
             },
             onDelete = null,
@@ -162,8 +168,8 @@ fun TasksScreen(
         TaskEditDialog(
             initial = editing,
             today = today,
-            onSave = { title, due ->
-                ApplicationScope.scope.launch { repository.update(editing.id, title, due) }
+            onSave = { title, due, remindAt ->
+                ApplicationScope.scope.launch { repository.update(editing.id, title, due, remindAt) }
                 editingId = null
             },
             onDelete = {
@@ -288,6 +294,30 @@ private fun TaskRow(
                         }
                     )
                 }
+                if (task.remindAt != null) {
+                    val context = LocalContext.current
+                    val reminderText = remember(task.remindAt) {
+                        ReminderTime.label(
+                            task.remindAt, System.currentTimeMillis(), ZoneId.systemDefault(),
+                            DateFormat.is24HourFormat(context)
+                        )
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = "Reminder",
+                            modifier = Modifier.size(14.dp),
+                            tint = onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            reminderText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
             }
         }
     }
@@ -301,12 +331,13 @@ private fun TaskRow(
 private fun TaskEditDialog(
     initial: Task?,
     today: LocalDate,
-    onSave: (title: String, dueDate: Long?) -> Unit,
+    onSave: (title: String, dueDate: Long?, remindAt: Long?) -> Unit,
     onDelete: (() -> Unit)?,
     onDismiss: () -> Unit
 ) {
     var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
     var dueDate by rememberSaveable { mutableStateOf(initial?.dueDate) }
+    var remindAt by rememberSaveable { mutableStateOf(initial?.remindAt) }
     var showPicker by rememberSaveable { mutableStateOf(false) }
     val canSave = title.isNotBlank()
 
@@ -314,7 +345,10 @@ private fun TaskEditDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "New task" else "Edit task") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -357,6 +391,14 @@ private fun TaskEditDialog(
                         Text("Remove deadline")
                     }
                 }
+
+                // ---- Reminder (a notification at a time of the day) ----
+                ReminderSection(
+                    remindAt = remindAt,
+                    dueDate = dueDate,
+                    today = today,
+                    onChange = { remindAt = it }
+                )
                 if (onDelete != null) {
                     TextButton(
                         onClick = onDelete,
@@ -368,7 +410,7 @@ private fun TaskEditDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = canSave, onClick = { onSave(title, dueDate) }) { Text("Save") }
+            TextButton(enabled = canSave, onClick = { onSave(title, dueDate, remindAt) }) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

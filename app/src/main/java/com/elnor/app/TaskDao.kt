@@ -20,9 +20,17 @@ interface TaskDao {
     @Insert
     suspend fun insert(task: TaskEntity): Long
 
-    /** Changes the title and the deadline. The completion state is not touched. */
-    @Query("UPDATE tasks SET title = :title, dueDate = :dueDate WHERE id = :id")
-    suspend fun updateDetails(id: Long, title: String, dueDate: Long?)
+    /** Changes the title, the deadline and the reminder. The completion state is not touched. */
+    @Query("UPDATE tasks SET title = :title, dueDate = :dueDate, remindAt = :remindAt WHERE id = :id")
+    suspend fun updateDetails(id: Long, title: String, dueDate: Long?, remindAt: Long?)
+
+    /** One task, or null when it does not exist (any more). */
+    @Query("SELECT * FROM tasks WHERE id = :id")
+    suspend fun getById(id: Long): TaskEntity?
+
+    /** Every open task whose reminder is after [now]: the ones that need an alarm. */
+    @Query("SELECT * FROM tasks WHERE completedAt IS NULL AND remindAt IS NOT NULL AND remindAt > :now")
+    suspend fun withUpcomingReminder(now: Long): List<TaskEntity>
 
     /** [completedAt] is the time it was checked off, or null to open the task again. */
     @Query("UPDATE tasks SET completedAt = :completedAt WHERE id = :id")

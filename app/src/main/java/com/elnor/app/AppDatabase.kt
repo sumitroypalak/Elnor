@@ -18,7 +18,7 @@ import org.json.JSONArray
  * Version 5: adds the archivedAt column (the Archive, see NoteEntity).
  * Version 6: adds the "tasks" table (the Task tab, see TaskEntity).
  */
-@Database(entities = [NoteEntity::class, TaskEntity::class], version = 6, exportSchema = false)
+@Database(entities = [NoteEntity::class, TaskEntity::class], version = 7, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
     abstract fun taskDao(): TaskDao
@@ -41,10 +41,21 @@ object ElnorDatabase {
     private fun build(appContext: Context): AppDatabase =
         Room.databaseBuilder(appContext, AppDatabase::class.java, "elnor_notes_room.db")
             .addMigrations(
-                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+                MIGRATION_6_7
             )
             .addCallback(LegacyNotesImport(appContext))
             .build()
+}
+
+/**
+ * Adds remindAt (the time of the reminder of a task). It is empty (NULL) for every task that
+ * already exists, so no old task gets a reminder.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tasks ADD COLUMN remindAt INTEGER")
+    }
 }
 
 /**
