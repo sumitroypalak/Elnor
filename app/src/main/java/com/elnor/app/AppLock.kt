@@ -155,6 +155,14 @@ object AppLock {
         )
     }
 
+    /**
+     * Is the App lock on? Reads the saved setting directly, so it also works when the app was not
+     * opened (a reminder notification must not show the text of a task on a locked app).
+     */
+    fun isEnabledInStorage(context: Context): Boolean =
+        context.applicationContext.getSharedPreferences(SETTINGS_FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ENABLED, false)
+
     fun setEnabled(context: Context, value: Boolean) {
         context.applicationContext.getSharedPreferences(SETTINGS_FILE, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_ENABLED, value).apply()
