@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 internal fun MarkdownPreviewView(
     text: String,
     onOpenLink: (LinkSpan) -> Unit,
+    onToggleCheck: (lineIndex: Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Calculated again only when the text changes (not on every redraw)
@@ -66,7 +68,8 @@ internal fun MarkdownPreviewView(
                 block = block,
                 first = index == 0,
                 accent = accent,
-                onOpenLink = onOpenLink
+                onOpenLink = onOpenLink,
+                onToggleCheck = onToggleCheck
             )
         }
     }
@@ -77,7 +80,8 @@ private fun PreviewBlockView(
     block: PreviewBlock,
     first: Boolean,
     accent: Color,
-    onOpenLink: (LinkSpan) -> Unit
+    onOpenLink: (LinkSpan) -> Unit,
+    onToggleCheck: (lineIndex: Int) -> Unit
 ) {
     val typography = MaterialTheme.typography
     val body = typography.bodyLarge
@@ -116,6 +120,32 @@ private fun PreviewBlockView(
                     .padding(end = 6.dp)
             )
             Text(shown, style = body, modifier = Modifier.weight(1f))
+        }
+
+        // A checklist item: a box that can be tapped (the tap ticks the line in the note) and the
+        // text, dimmed and crossed out when it is done
+        PreviewKind.CHECKLIST -> Row(
+            modifier = Modifier.padding(start = (block.level * 20).dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = block.checked,
+                onCheckedChange = { onToggleCheck(block.lineIndex) }
+            )
+            Text(
+                shown,
+                style = if (block.checked) {
+                    body.copy(textDecoration = TextDecoration.LineThrough)
+                } else {
+                    body
+                },
+                color = if (block.checked) {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                } else {
+                    Color.Unspecified
+                },
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

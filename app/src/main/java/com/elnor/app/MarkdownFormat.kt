@@ -12,6 +12,7 @@ data class TextEdit(val text: String, val selStart: Int, val selEnd: Int)
  *  - Heading:        "# Big heading", "## Smaller heading" (at the start of a line)
  *  - Bullet list:    "- item" or "* item"
  *  - Numbered list:  "1. item"
+ *  - Checklist:      "- [ ] to do" and "- [x] done" (also "* [ ]" and a capital X)
  *
  * The editor shows the text styled (bold letters, big headings, dimmed marks) but keeps the marks
  * visible, so the user always sees what is stored and can edit it. The note list shows the text
@@ -31,6 +32,9 @@ object MarkdownFormat {
     private val HEADING = Regex("""^(#{1,6})[ \t]+""")
     private val BULLET = Regex("""^([ \t]*)[-*][ \t]+""")
     private val NUMBER = Regex("""^([ \t]*)(\d{1,9})\.[ \t]+""")
+
+    /** "- [ ] " or "- [x] ": group 1 the indent, group 2 the sign of the box (space, x or X). */
+    private val CHECK = Regex("""^([ \t]*)[-*][ \t]+\[([ xX])\](?:[ \t]+|$)""")
     private val BOLD = Regex("""\*\*(?=\S)(.+?)(?<=\S)\*\*""")
 
     /** All the styled parts of [text], line by line. Offsets are positions in [text]. */
@@ -59,9 +63,10 @@ object MarkdownFormat {
                 out.add(Span(offset + markLength, offset + line.length, kind))
             }
         } else {
-            val bullet = BULLET.find(line)
-            val number = if (bullet == null) NUMBER.find(line) else null
-            val list = bullet ?: number
+            val check = CHECK.find(line)
+            val bullet = if (check == null) BULLET.find(line) else null
+            val number = if (check == null && bullet == null) NUMBER.find(line) else null
+            val list = check ?: bullet ?: number
             if (list != null) {
                 val indent = list.groupValues[1].length
                 out.add(Span(offset + indent, offset + list.value.length, Kind.LIST_MARKER))
@@ -218,7 +223,7 @@ object MarkdownFormat {
 
     /** How many characters at the start of [line] are a heading mark, or the indent and mark of a list item. */
     private fun blockMarkLength(line: String): Int =
-        (HEADING.find(line) ?: BULLET.find(line) ?: NUMBER.find(line))?.value?.length ?: 0
+        (HEADING.find(line) ?: CHECK.find(line) ?: BULLET.find(line) ?: NUMBER.find(line))?.value?.length ?: 0
 
     /** Heading button: the line of the cursor (every selected line) goes plain -> # -> ## -> plain. */
     fun cycleHeading(text: String, selStart: Int, selEnd: Int): TextEdit =
@@ -277,6 +282,61 @@ object MarkdownFormat {
             }
         }
 
+    /**
+     * Checklist button: every selected line becomes "- [ ] item" (a line that already is a
+     * checklist item stays as it is, ticked or not), or, when all of them already are checklist
+     * items, they lose the box and the "- " and become plain lines again.
+     */
+    fun toggleChecklist(text: String, selStart: Int, selEnd: Int): TextEdit =
+        transformLines(text, selStart, selEnd) { lines ->
+            val filled = lines.filter { !skipped(it, lines) }
+            val remove = filled.isNotEmpty() && filled.all { CHECK.containsMatchIn(it) }
+            lines.map { line ->
+                when {
+                    skipped(line, lines) -> line
+                    remove -> splitLine(line).let { it.indent + it.content }
+                    CHECK.containsMatchIn(line) -> line
+                    else -> splitLine(line).let { it.indent + "- [ ] " + it.content }
+                }
+            }
+        }
+
+    /**
+     * Ticks or unticks the box of line number [lineIndex] (counted from 0, lines are split at
+     * "\n"): "[ ]" becomes "[x]" and "[x]" or "[X]" becomes "[ ]". Only that one character
+     * changes, so the text keeps its length. Returns null when that line is no checklist item.
+     */
+    fun toggleCheck(text: String, lineIndex: Int): String? {
+        if (lineIndex < 0) return null
+        var lineStart = 0
+        repeat(lineIndex) {
+            val next = text.indexOf('\n', lineStart)
+            if (next < 0) return null
+            lineStart = next + 1
+        }
+        var lineEnd = text.indexOf('\n', lineStart)
+        if (lineEnd < 0) lineEnd = text.length
+        val match = CHECK.find(text.substring(lineStart, lineEnd)) ?: return null
+        val sign = lineStart + match.groups[2]!!.range.first
+        val ticked = text[sign] != ' '
+        return text.substring(0, sign) + (if (ticked) " " else "x") + text.substring(sign + 1)
+    }
+
+    /** How many checklist items [text] has ([total]) and how many of them are ticked ([done]). */
+    data class ChecklistProgress(val done: Int, val total: Int)
+
+    fun checklistProgress(text: String): ChecklistProgress {
+        if (!text.contains('[')) return ChecklistProgress(0, 0)
+        var done = 0
+        var total = 0
+        for (line in text.split('\n')) {
+            val match = CHECK.find(line) ?: continue
+            total++
+            if (match.groupValues[2] != " ") done++
+        }
+        return ChecklistProgress(done, total)
+    }
+
     // ---- The Enter key inside a list ----
 
     /**
@@ -300,9 +360,10 @@ object MarkdownFormat {
 
         val line = newText.substring(lineStart, cursor - 1)
 
-        val bullet = BULLET.find(line)
-        val number = if (bullet == null) NUMBER.find(line) else null
-        val match = bullet ?: number ?: return null
+        val check = CHECK.find(line)
+        val bullet = if (check == null) BULLET.find(line) else null
+        val number = if (check == null && bullet == null) NUMBER.find(line) else null
+        val match = check ?: bullet ?: number ?: return null
 
         val rest = line.substring(match.value.length)
         if (rest.isBlank()) {
@@ -311,7 +372,11 @@ object MarkdownFormat {
         }
 
         val indent = match.groupValues[1]
-        val mark = if (bullet != null) {
+        val mark = if (check != null) {
+            // the next item starts with an empty box
+            val symbol = line.substring(indent.length, indent.length + 1)
+            "$indent$symbol [ ] "
+        } else if (bullet != null) {
             val symbol = line.substring(indent.length, indent.length + 1)
             "$indent$symbol "
         } else {
@@ -334,8 +399,12 @@ object MarkdownFormat {
         if (heading != null) {
             result = result.substring(heading.value.length)
         } else {
-            val bullet = BULLET.find(result)
-            if (bullet != null) {
+            val check = CHECK.find(result)
+            val bullet = if (check == null) BULLET.find(result) else null
+            if (check != null) {
+                val sign = if (check.groupValues[2] == " ") "☐ " else "☑ "
+                result = check.groupValues[1] + sign + result.substring(check.value.length)
+            } else if (bullet != null) {
                 result = bullet.groupValues[1] + "• " + result.substring(bullet.value.length)
             }
         }
@@ -360,14 +429,21 @@ object MarkdownFormat {
 
     // ---- Reading a line as a block (for the preview) ----
 
-    enum class BlockKind { PARAGRAPH, HEADING1, HEADING2, BULLET, NUMBERED }
+    enum class BlockKind { PARAGRAPH, HEADING1, HEADING2, BULLET, NUMBERED, CHECKLIST }
 
     /**
      * One line of a note, cut into its parts for the preview. [indent] is the width of the spaces
      * in front of a list mark (a tab counts as 4). [number] is the number of a numbered item as it
-     * was typed ("3"), null for the other kinds. [content] is what follows the mark.
+     * was typed ("3"), null for the other kinds. [content] is what follows the mark. [checked] is
+     * true for a ticked checklist item.
      */
-    data class Block(val kind: BlockKind, val indent: Int, val number: String?, val content: String)
+    data class Block(
+        val kind: BlockKind,
+        val indent: Int,
+        val number: String?,
+        val content: String,
+        val checked: Boolean = false
+    )
 
     /** What kind of line [line] is. It follows the same rules as [parse]. */
     fun blockOf(line: String): Block {
@@ -375,6 +451,16 @@ object MarkdownFormat {
         if (heading != null) {
             val kind = if (heading.groupValues[1].length == 1) BlockKind.HEADING1 else BlockKind.HEADING2
             return Block(kind, 0, null, line.substring(heading.value.length))
+        }
+        val check = CHECK.find(line)
+        if (check != null) {
+            return Block(
+                BlockKind.CHECKLIST,
+                indentWidth(check.groupValues[1]),
+                null,
+                line.substring(check.value.length),
+                check.groupValues[2] != " "
+            )
         }
         val bullet = BULLET.find(line)
         if (bullet != null) {
@@ -434,6 +520,7 @@ object MarkdownFormat {
 
     private fun splitLine(line: String): LineParts {
         HEADING.find(line)?.let { return LineParts("", line.substring(it.value.length)) }
+        CHECK.find(line)?.let { return LineParts(it.groupValues[1], line.substring(it.value.length)) }
         BULLET.find(line)?.let { return LineParts(it.groupValues[1], line.substring(it.value.length)) }
         NUMBER.find(line)?.let { return LineParts(it.groupValues[1], line.substring(it.value.length)) }
         val indentLength = line.length - line.trimStart(' ', '\t').length
