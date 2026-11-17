@@ -41,6 +41,7 @@ internal fun MarkdownPreviewView(
     text: String,
     onOpenLink: (LinkSpan) -> Unit,
     onToggleCheck: (lineIndex: Int) -> Unit,
+    onOpenNoteLink: ((name: String) -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     // Calculated again only when the text changes (not on every redraw)
@@ -69,7 +70,8 @@ internal fun MarkdownPreviewView(
                 first = index == 0,
                 accent = accent,
                 onOpenLink = onOpenLink,
-                onToggleCheck = onToggleCheck
+                onToggleCheck = onToggleCheck,
+                onOpenNoteLink = onOpenNoteLink
             )
         }
     }
@@ -81,12 +83,15 @@ private fun PreviewBlockView(
     first: Boolean,
     accent: Color,
     onOpenLink: (LinkSpan) -> Unit,
-    onToggleCheck: (lineIndex: Int) -> Unit
+    onToggleCheck: (lineIndex: Int) -> Unit,
+    onOpenNoteLink: ((name: String) -> Unit)?
 ) {
     val typography = MaterialTheme.typography
     val body = typography.bodyLarge
     // Rebuilt only when the block or the colour changes
-    val shown = remember(block, accent) { previewText(block, accent, onOpenLink) }
+    val shown = remember(block, accent, onOpenNoteLink) {
+        previewText(block, accent, onOpenLink, onOpenNoteLink)
+    }
 
     when (block.kind) {
         PreviewKind.BLANK -> Spacer(Modifier.height(8.dp))
@@ -157,7 +162,8 @@ private fun PreviewBlockView(
 private fun previewText(
     block: PreviewBlock,
     linkColor: Color,
-    onOpenLink: (LinkSpan) -> Unit
+    onOpenLink: (LinkSpan) -> Unit,
+    onOpenNoteLink: ((name: String) -> Unit)?
 ): AnnotatedString = buildAnnotatedString {
     for (run in block.runs) {
         if (run.bold) pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
@@ -179,5 +185,16 @@ private fun previewText(
             link.start,
             link.end
         )
+    }
+    // Links to other notes: the whole [[Name]] is shown and a tap opens that note
+    if (onOpenNoteLink != null) {
+        for (link in block.noteLinks) {
+            if (link.start >= link.end || link.end > length) continue
+            addLink(
+                LinkAnnotation.Clickable(tag = link.name, styles = linkStyles) { onOpenNoteLink(link.name) },
+                link.start,
+                link.end
+            )
+        }
     }
 }

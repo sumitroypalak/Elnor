@@ -46,7 +46,11 @@ internal fun ColumnScope.EditorBottomArea(
     onHeading: () -> Unit,
     onBullet: () -> Unit,
     onNumbered: () -> Unit,
-    onChecklist: () -> Unit
+    onChecklist: () -> Unit,
+    onNoteLink: (() -> Unit)?,
+    /** The link to another note the cursor is in, or null. */
+    activeNoteLink: NoteLinkSpan?,
+    onGoToNote: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -84,8 +88,18 @@ internal fun ColumnScope.EditorBottomArea(
                 onHeading = onHeading,
                 onBullet = onBullet,
                 onNumbered = onNumbered,
-                onChecklist = onChecklist
+                onChecklist = onChecklist,
+                onNoteLink = onNoteLink
             )
+            // The cursor is in [[Name]]: a button opens that note
+            if (activeNoteLink != null) {
+                Spacer(Modifier.width(8.dp))
+                NoteLinkChip(
+                    name = activeNoteLink.name,
+                    onClick = onGoToNote,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
             // The link button fades in and out with a small zoom. While it goes out the
             // last link is still shown (the cursor has already left it).
             if (activeLink != null) lastLink[0] = activeLink

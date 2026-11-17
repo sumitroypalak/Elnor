@@ -54,10 +54,12 @@ class NoteTextTransformation(
     /** Which of [found] is the chosen one (a stronger colour), or -1. */
     private val foundCurrent: Int = -1,
     /** The tags of the text (see [TagDetector]): shown in the link colour. */
-    private val tags: List<TagSpan> = emptyList()
+    private val tags: List<TagSpan> = emptyList(),
+    /** Links to other notes ([[Name]]): shown like links. */
+    private val noteLinks: List<NoteLinkSpan> = emptyList()
 ) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
-        if (links.isEmpty() && format.isEmpty() && found.isEmpty() && tags.isEmpty()) {
+        if (links.isEmpty() && format.isEmpty() && found.isEmpty() && tags.isEmpty() && noteLinks.isEmpty()) {
             return TransformedText(text, OffsetMapping.Identity)
         }
         val linkStyle = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
@@ -73,6 +75,9 @@ class NoteTextTransformation(
                 if (tag.start < tag.end && tag.end <= text.length) addStyle(tagStyle, tag.start, tag.end)
             }
             for (link in links) {
+                if (link.end <= text.length) addStyle(linkStyle, link.start, link.end)
+            }
+            for (link in noteLinks) {
                 if (link.end <= text.length) addStyle(linkStyle, link.start, link.end)
             }
             // Last, so the found places stay visible over bold, links and the rest
