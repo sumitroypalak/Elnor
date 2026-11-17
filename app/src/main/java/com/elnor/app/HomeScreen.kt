@@ -48,6 +48,10 @@ fun ElnorApp(
     // The "new task" dialog of the Task tab (opened by the round "+" button of the bottom bar)
     var newTaskOpen by rememberSaveable { mutableStateOf(false) }
     var editingNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The title a new note starts with (a note made from a link to a note that did not exist yet)
+    var newNoteTitle by rememberSaveable { mutableStateOf("") }
+    // The name of a link that points to no note: the question "Create it?" is open for it
+    var createLinkName by rememberSaveable { mutableStateOf<String?>(null) }
     // Wide window: the list stays on the left and the editor opens on the right
     val windowClass = LocalWindowClass.current
     val twoPane = isTwoPane(windowClass)
@@ -210,14 +214,38 @@ fun ElnorApp(
 
     // Opens a note (or a new note for null). With the editor already open (two-pane), the note
     // that is open is saved and closed first, so the next one can start.
-    fun openNote(id: Long?) {
+    fun openNote(id: Long?, initialTitle: String = "") {
         if (editorOpen) {
             if (id != null && id == editingNoteId) return // already open
             editorViewModel.onBack()
         }
         editorSession++
         editingNoteId = id
+        newNoteTitle = initialTitle
         editorOpen = true
+    }
+
+    // A link to another note ([[Name]]) was used in the editor: open that note, or, when no note has
+    // the name, ask before making a new one (a typo in a link must not make a note by itself).
+    fun followNoteLink(name: String) {
+        val target = NoteLinks.resolve(everyNote, name)
+        if (target != null) openNote(target.id) else createLinkName = name
+    }
+    val noteLinkHost = remember(everyNote) { NoteLinkHost(everyNote) { name -> followNoteLink(name) } }
+
+    createLinkName?.let { missing ->
+        AlertDialog(
+            onDismissRequest = { createLinkName = null },
+            title = { Text("Note not found") },
+            text = { Text("There is no note named \"$missing\". Create it?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    createLinkName = null
+                    openNote(null, initialTitle = missing)
+                }) { Text("Create") }
+            },
+            dismissButton = { TextButton(onClick = { createLinkName = null }) { Text("Cancel") } }
+        )
     }
 
     // The tabs and the round "+" button, used by the bottom bar and by the rail
@@ -315,6 +343,8 @@ fun ElnorApp(
                     note = editingNote,
                     viewModel = editorViewModel,
                     onClose = { editorOpen = false },
+                    linkHost = noteLinkHost,
+                    initialTitle = newNoteTitle,
                     // The editor already moved the note to the Trash. The list shows the message.
                     onNoteDeleted = { deleted ->
                         uiScope.launch { showDeleteUndo(snackbarHostState, repository, listOf(deleted)) }

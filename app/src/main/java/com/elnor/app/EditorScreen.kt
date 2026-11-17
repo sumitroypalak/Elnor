@@ -41,14 +41,21 @@ fun EditorScreen(
      * next uses it to offer "Undo". It gets the note as it was before the delete (only the id and
      * the pin are filled in for certain).
      */
-    onNoteDeleted: (Note) -> Unit = {}
+    onNoteDeleted: (Note) -> Unit = {},
+    /**
+     * Lets the page follow links to other notes ([[Name]]). null (the Archive) means no link
+     * button and no links.
+     */
+    linkHost: NoteLinkHost? = null,
+    /** The title a new note starts with (a note made from a link that pointed to nothing). */
+    initialTitle: String = ""
 ) {
     val bgColor = MaterialTheme.colorScheme.background
     // A phone held sideways has very little height: the bars above and below the text get smaller
     val compactHeight = LocalWindowClass.current.compactHeight
     val noteKey = note?.id ?: -1L
 
-    var title by rememberSaveable(noteKey) { mutableStateOf(note?.title ?: "") }
+    var title by rememberSaveable(noteKey) { mutableStateOf(note?.title ?: initialTitle) }
     var bodyValue by rememberSaveable(noteKey, stateSaver = TextFieldValue.Saver) {
         val text = note?.body ?: ""
         // cursor starts at the end of the existing text
@@ -103,8 +110,14 @@ fun EditorScreen(
     val findIndex = if (findMatches.isEmpty()) -1 else findCurrent.coerceIn(0, findMatches.lastIndex)
     // Tags (#work) in the text are shown in the link colour (see Tags.kt)
     val tags = remember(bodyValue.text) { TagDetector.find(bodyValue.text) }
-    val textStyling = remember(links, formatSpans, tags, linkColor, markerColor, findMatches, findIndex) {
-        NoteTextTransformation(links, formatSpans, linkColor, markerColor, findMatches, findIndex, tags)
+    // Links to other notes ([[Name]], see NoteLinks.kt). Only on a page that can follow them.
+    val noteLinks = remember(bodyValue.text, linkHost != null) {
+        if (linkHost != null) NoteLinks.find(bodyValue.text) else emptyList()
+    }
+    val textStyling = remember(links, formatSpans, tags, linkColor, markerColor, findMatches, findIndex, noteLinks) {
+        NoteTextTransformation(
+            links, formatSpans, linkColor, markerColor, findMatches, findIndex, tags, noteLinks
+        )
     }
     var bodyFocused by remember { mutableStateOf(false) }
     val cursor = bodyValue.selection
@@ -113,8 +126,26 @@ fun EditorScreen(
     } else {
         null
     }
+    val activeNoteLink = if (bodyFocused && cursor.collapsed) NoteLinks.linkAt(noteLinks, cursor.start) else null
     // The last link the cursor was in. The link button shows it while it fades out.
     val lastLink = remember { arrayOfNulls<LinkSpan>(1) }
+
+    // Opens the note a link points to. The screen that owns the notes saves this note first and
+    // opens the other one (or offers to create it). [linkHost] changes when the notes change, so
+    // the newest one is read when the link is used, not the one of the first draw.
+    val currentLinkHost by rememberUpdatedState(linkHost)
+    val openNoteLink: ((String) -> Unit)? = if (linkHost != null) {
+        remember {
+            { name: String ->
+                haptic(HapticKind.TICK)
+                currentLinkHost?.open?.invoke(name)
+                Unit
+            }
+        }
+    } else {
+        null
+    }
+    var linkPickerOpen by rememberSaveable { mutableStateOf(false) }
 
     // A formatting button: [change] gets the text and the selection and returns the new text. The
     // page shows it and the ViewModel remembers it (saved after a typing pause, like typing).
@@ -378,6 +409,7 @@ fun EditorScreen(
                 textStyling = textStyling,
                 previewMode = previewMode,
                 onOpenLink = openPreviewLink,
+                onOpenNoteLink = openNoteLink,
                 onToggleCheck = { lineIndex ->
                     // A tap on a box in the preview ticks or unticks that line of the text. Only
                     // one character changes, so the cursor of the editor stays where it was.
@@ -404,9 +436,24 @@ fun EditorScreen(
                 onHeading = { applyFormat(MarkdownFormat::cycleHeading) },
                 onBullet = { applyFormat(MarkdownFormat::toggleBullet) },
                 onNumbered = { applyFormat(MarkdownFormat::toggleNumbered) },
-                onChecklist = { applyFormat(MarkdownFormat::toggleChecklist) }
+                onChecklist = { applyFormat(MarkdownFormat::toggleChecklist) },
+                onNoteLink = if (linkHost != null) ({ linkPickerOpen = true }) else null,
+                activeNoteLink = activeNoteLink,
+                onGoToNote = { activeNoteLink?.let { openNoteLink?.invoke(it.name) } }
             )
         }
+    }
+
+    if (linkPickerOpen && linkHost != null) {
+        NoteLinkPickerDialog(
+            notes = linkHost.notes,
+            excludeId = note?.id,
+            onPick = { name ->
+                linkPickerOpen = false
+                applyFormat { text, selStart, selEnd -> NoteLinks.insertLink(text, selStart, selEnd, name) }
+            },
+            onDismiss = { linkPickerOpen = false }
+        )
     }
 
     if (confirmLeaveUnsaved) {

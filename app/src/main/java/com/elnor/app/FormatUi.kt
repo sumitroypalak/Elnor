@@ -36,6 +36,8 @@ fun FormatToolbar(
     onBullet: () -> Unit,
     onNumbered: () -> Unit,
     onChecklist: () -> Unit,
+    /** Link to another note. null: the page cannot follow note links (no button). */
+    onNoteLink: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     /** A phone held sideways: less space above and below the pill. */
     compact: Boolean = false
@@ -62,6 +64,9 @@ fun FormatToolbar(
             FormatIconButton(BulletListIcon, "Bullet list", colors.onBar, onBullet)
             FormatIconButton(NumberedListIcon, "Numbered list", colors.onBar, onNumbered)
             FormatTextButton("☑", "Checklist", FontWeight.Bold, colors.onBar, onChecklist)
+            if (onNoteLink != null) {
+                FormatTextButton("[[", "Link to a note", FontWeight.Bold, colors.onBar, onNoteLink)
+            }
         }
     }
 }

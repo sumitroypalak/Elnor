@@ -26,7 +26,9 @@ data class PreviewBlock(
     val links: List<LinkSpan>,
     val tags: List<TagSpan> = emptyList(),
     val checked: Boolean = false,
-    val lineIndex: Int = -1
+    val lineIndex: Int = -1,
+    /** Links to other notes ([[Name]]) in [text]; positions are positions in [text]. */
+    val noteLinks: List<NoteLinkSpan> = emptyList()
 ) {
     /** The text of the line without any mark. */
     val text: String get() = runs.joinToString("") { it.text }
@@ -80,20 +82,29 @@ object MarkdownPreview {
         val plain = runs.joinToString("") { it.text }
         val links = LinkDetector.find(plain)
         val tags = TagDetector.find(plain)
+        val noteLinks = NoteLinks.find(plain)
         val level = (block.indent / 2).coerceAtMost(MAX_LEVEL)
         return when (block.kind) {
             MarkdownFormat.BlockKind.HEADING1 ->
-                PreviewBlock(PreviewKind.HEADING1, 0, "", runs, links, tags)
+                PreviewBlock(PreviewKind.HEADING1, 0, "", runs, links, tags, noteLinks = noteLinks)
             MarkdownFormat.BlockKind.HEADING2 ->
-                PreviewBlock(PreviewKind.HEADING2, 0, "", runs, links, tags)
+                PreviewBlock(PreviewKind.HEADING2, 0, "", runs, links, tags, noteLinks = noteLinks)
             MarkdownFormat.BlockKind.BULLET ->
-                PreviewBlock(PreviewKind.BULLET, level, if (level % 2 == 0) "•" else "◦", runs, links, tags)
+                PreviewBlock(
+                    PreviewKind.BULLET, level, if (level % 2 == 0) "•" else "◦", runs, links, tags,
+                    noteLinks = noteLinks
+                )
             MarkdownFormat.BlockKind.NUMBERED ->
-                PreviewBlock(PreviewKind.NUMBERED, level, block.number + ".", runs, links, tags)
+                PreviewBlock(
+                    PreviewKind.NUMBERED, level, block.number + ".", runs, links, tags,
+                    noteLinks = noteLinks
+                )
             MarkdownFormat.BlockKind.CHECKLIST ->
-                PreviewBlock(PreviewKind.CHECKLIST, level, "", runs, links, tags, block.checked, lineIndex)
+                PreviewBlock(
+                    PreviewKind.CHECKLIST, level, "", runs, links, tags, block.checked, lineIndex, noteLinks
+                )
             MarkdownFormat.BlockKind.PARAGRAPH ->
-                PreviewBlock(PreviewKind.PARAGRAPH, 0, "", runs, links, tags)
+                PreviewBlock(PreviewKind.PARAGRAPH, 0, "", runs, links, tags, noteLinks = noteLinks)
         }
     }
 }

@@ -55,7 +55,9 @@ internal fun ColumnScope.EditorTextCard(
     textStyling: NoteTextTransformation,
     previewMode: Boolean,
     onOpenLink: (LinkSpan) -> Unit,
-    onToggleCheck: (lineIndex: Int) -> Unit
+    onToggleCheck: (lineIndex: Int) -> Unit,
+    /** null: note links are not followed on this page (they are shown as normal text). */
+    onOpenNoteLink: ((name: String) -> Unit)?
 ) {
     val fieldColors = TextFieldDefaults.colors(
         focusedContainerColor = Color.Transparent,
@@ -139,6 +141,7 @@ internal fun ColumnScope.EditorTextCard(
                     text = bodyValue.text,
                     onOpenLink = onOpenLink,
                     onToggleCheck = onToggleCheck,
+                    onOpenNoteLink = onOpenNoteLink,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
