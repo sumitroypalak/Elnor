@@ -48,7 +48,9 @@ fun TasksScreen(
     padding: PaddingValues,
     addDialogOpen: Boolean,
     onAddDialogDismiss: () -> Unit,
-    snackbarHostState: SnackbarHostState
+    snackbarHostState: SnackbarHostState,
+    /** The collections a task can be put in (A to Z). Empty: the dialog has no collection choice. */
+    collections: List<NoteCollection> = emptyList()
 ) {
     val view = LocalView.current
     val uiScope = rememberCoroutineScope()
@@ -153,8 +155,12 @@ fun TasksScreen(
         TaskEditDialog(
             initial = null,
             today = today,
-            onSave = { title, due, remindAt ->
-                ApplicationScope.scope.launch { repository.add(title, due, remindAt) }
+            collections = collections,
+            onSave = { title, due, remindAt, collectionId ->
+                ApplicationScope.scope.launch {
+                    val id = repository.add(title, due, remindAt)
+                    if (id != null && collectionId != null) repository.setCollection(id, collectionId)
+                }
                 onAddDialogDismiss()
             },
             onDelete = null,
@@ -168,8 +174,12 @@ fun TasksScreen(
         TaskEditDialog(
             initial = editing,
             today = today,
-            onSave = { title, due, remindAt ->
-                ApplicationScope.scope.launch { repository.update(editing.id, title, due, remindAt) }
+            collections = collections,
+            onSave = { title, due, remindAt, collectionId ->
+                ApplicationScope.scope.launch {
+                    repository.update(editing.id, title, due, remindAt)
+                    if (collectionId != editing.collectionId) repository.setCollection(editing.id, collectionId)
+                }
                 editingId = null
             },
             onDelete = {
@@ -331,13 +341,15 @@ private fun TaskRow(
 private fun TaskEditDialog(
     initial: Task?,
     today: LocalDate,
-    onSave: (title: String, dueDate: Long?, remindAt: Long?) -> Unit,
+    collections: List<NoteCollection>,
+    onSave: (title: String, dueDate: Long?, remindAt: Long?, collectionId: Long?) -> Unit,
     onDelete: (() -> Unit)?,
     onDismiss: () -> Unit
 ) {
     var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
     var dueDate by rememberSaveable { mutableStateOf(initial?.dueDate) }
     var remindAt by rememberSaveable { mutableStateOf(initial?.remindAt) }
+    var collectionId by rememberSaveable { mutableStateOf(initial?.collectionId) }
     var showPicker by rememberSaveable { mutableStateOf(false) }
     val canSave = title.isNotBlank()
 
@@ -399,6 +411,29 @@ private fun TaskEditDialog(
                     today = today,
                     onChange = { remindAt = it }
                 )
+
+                // ---- Collection (a folder of the Collections tab) ----
+                if (collections.isNotEmpty()) {
+                    Text(
+                        "Collection",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = collectionId == null,
+                            onClick = { collectionId = null },
+                            label = { Text("None") }
+                        )
+                        for (collection in collections) {
+                            FilterChip(
+                                selected = collectionId == collection.id,
+                                onClick = { collectionId = collection.id },
+                                label = { Text(collection.name) }
+                            )
+                        }
+                    }
+                }
                 if (onDelete != null) {
                     TextButton(
                         onClick = onDelete,
@@ -410,7 +445,7 @@ private fun TaskEditDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = canSave, onClick = { onSave(title, dueDate, remindAt) }) { Text("Save") }
+            TextButton(enabled = canSave, onClick = { onSave(title, dueDate, remindAt, collectionId) }) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

@@ -106,6 +106,23 @@ fun ElnorApp(
     val haptic = rememberHaptic()
     var viewMode by remember { mutableStateOf(loadNotesViewMode(context)) }
 
+    // ---- Collections (the Collections tab, see CollectionsScreen.kt) ----
+    val collectionRepository = remember { RoomCollectionRepository.get(context) }
+    // null until the database has answered
+    val collections by collectionRepository.collections
+        .collectAsState<List<NoteCollection>, List<NoteCollection>?>(initial = null)
+    val sortedCollections = remember(collections) { sortCollections(collections ?: emptyList()) }
+    val allTasks by taskRepository.tasks.collectAsState(initial = emptyList())
+    // The collection that is open on the tab. Kept here, so it is still open after a note was opened
+    // from it and closed again.
+    var openCollectionId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The "new collection" question (the round "+" button on the Collections tab, or "New
+    // collection" in the Move question). [createForNoteId] is the note that goes into it.
+    var newCollectionOpen by rememberSaveable { mutableStateOf(false) }
+    var createForNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The note whose "Move to collection" question is open
+    var moveNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
+
     // Recent searches: listed under the search field while it is focused and empty
     var recentSearches by remember { mutableStateOf(loadRecentSearches(context)) }
     var searchFocused by remember { mutableStateOf(false) }
@@ -233,6 +250,47 @@ fun ElnorApp(
     }
     val noteLinkHost = remember(everyNote) { NoteLinkHost(everyNote) { name -> followNoteLink(name) } }
 
+    if (newCollectionOpen) {
+        CollectionNameDialog(
+            title = "New collection",
+            confirmLabel = "Create",
+            initial = "",
+            existing = sortedCollections,
+            exceptId = null,
+            onSave = { name ->
+                val noteId = createForNoteId
+                newCollectionOpen = false
+                createForNoteId = null
+                ApplicationScope.scope.launch {
+                    val id = collectionRepository.create(name)
+                    // made from the "Move to collection" question: the note goes in at once
+                    if (id != null && noteId != null) repository.setCollection(listOf(noteId), id)
+                }
+            },
+            onDismiss = {
+                newCollectionOpen = false
+                createForNoteId = null
+            }
+        )
+    }
+    moveNoteId?.let { noteId ->
+        CollectionChooserDialog(
+            collections = sortedCollections,
+            currentId = everyNote.firstOrNull { it.id == noteId }?.collectionId,
+            onPick = { picked ->
+                moveNoteId = null
+                haptic(HapticKind.CONFIRM)
+                ApplicationScope.scope.launch { repository.setCollection(listOf(noteId), picked) }
+            },
+            onNew = {
+                moveNoteId = null
+                createForNoteId = noteId
+                newCollectionOpen = true
+            },
+            onDismiss = { moveNoteId = null }
+        )
+    }
+
     createLinkName?.let { missing ->
         AlertDialog(
             onDismissRequest = { createLinkName = null },
@@ -259,6 +317,9 @@ fun ElnorApp(
         if (homeTab == HomeTab.TASK) {
             // On the Task tab the "+" button adds a task, not a note
             newTaskOpen = true
+        } else if (homeTab == HomeTab.COLLECTION) {
+            // On the Collections tab it makes a collection
+            newCollectionOpen = true
         } else {
             homeTab = HomeTab.NOTE
             openNote(null)
@@ -305,7 +366,8 @@ fun ElnorApp(
                     haptic = haptic,
                     repository = repository,
                     onArchive = { archiveNotes(listOf(note.id)) },
-                    onDelete = { deleteNotes(listOf(note)) }
+                    onDelete = { deleteNotes(listOf(note)) },
+                    onMoveToCollection = { moveNoteId = note.id }
                 )
             },
             onClick = {
@@ -417,13 +479,35 @@ fun ElnorApp(
                                 padding = padding,
                                 addDialogOpen = newTaskOpen,
                                 onAddDialogDismiss = { newTaskOpen = false },
-                                snackbarHostState = snackbarHostState
+                                snackbarHostState = snackbarHostState,
+                                collections = sortedCollections
                             )
                         } else {
-                            HomeTabPlaceholder(
-                                title = "Collections are coming soon",
-                                subtitle = "Group your notes and tasks here.",
-                                padding = padding
+                            CollectionsScreen(
+                                collections = collections,
+                                notes = notes,
+                                tasks = allTasks,
+                                padding = padding,
+                                openId = openCollectionId,
+                                onOpenChange = { openCollectionId = it },
+                                onOpenNote = { id -> openNote(id) },
+                                onRename = { id, name ->
+                                    ApplicationScope.scope.launch { collectionRepository.rename(id, name) }
+                                },
+                                onDelete = { id ->
+                                    haptic(HapticKind.CONFIRM)
+                                    ApplicationScope.scope.launch { collectionRepository.delete(id) }
+                                },
+                                onRemoveNote = { id ->
+                                    ApplicationScope.scope.launch { repository.setCollection(listOf(id), null) }
+                                },
+                                onToggleTask = { id, done ->
+                                    if (done) haptic(HapticKind.CONFIRM)
+                                    ApplicationScope.scope.launch { taskRepository.setCompleted(id, done) }
+                                },
+                                onRemoveTask = { id ->
+                                    ApplicationScope.scope.launch { taskRepository.setCollection(id, null) }
+                                }
                             )
                         }
                     } else {

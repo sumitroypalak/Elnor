@@ -60,7 +60,9 @@ internal fun noteMenuActions(
     haptic: (HapticKind) -> Unit,
     repository: NoteRepository,
     onArchive: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    /** Opens the "Move to collection" question. null: no such menu entry. */
+    onMoveToCollection: (() -> Unit)? = null
 ): List<NoteMenuAction> {
     val deleteAction = NoteMenuAction(
         label = "Delete",
@@ -82,7 +84,7 @@ internal fun noteMenuActions(
             deleteAction
         )
     } else {
-        listOf(
+        listOfNotNull(
             // Pinned notes are listed first. The list follows the
             // repository, so it reorders by itself.
             NoteMenuAction(
@@ -94,6 +96,11 @@ internal fun noteMenuActions(
                     }
                 }
             ),
+            if (onMoveToCollection != null) {
+                NoteMenuAction(label = "Move to collection", onClick = onMoveToCollection)
+            } else {
+                null
+            },
             NoteMenuAction(
                 label = "Archive",
                 onClick = onArchive

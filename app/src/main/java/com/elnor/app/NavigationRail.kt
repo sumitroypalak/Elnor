@@ -40,10 +40,14 @@ internal fun ElnorNavigationRail(
                 containerColor = colors.newNote,
                 contentColor = colors.onNewNote
             ) {
-                // On the Task tab the "+" button adds a task, not a note
+                // On the Task tab the "+" button adds a task, on the Collections tab a collection
                 Icon(
                     Icons.Default.Add,
-                    contentDescription = if (selected == HomeTab.TASK) "New task" else "New note"
+                    contentDescription = when (selected) {
+                        HomeTab.TASK -> "New task"
+                        HomeTab.COLLECTION -> "New collection"
+                        else -> "New note"
+                    }
                 )
             }
             Spacer(Modifier.height(12.dp))

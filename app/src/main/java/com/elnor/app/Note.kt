@@ -14,7 +14,9 @@ data class Note(
     /** null for a normal note. A pinned note has the time it was pinned and is shown first. */
     val pinnedAt: Long? = null,
     /** null for a normal note. An archived note has the time it was archived and is not on the home list. */
-    val archivedAt: Long? = null
+    val archivedAt: Long? = null,
+    /** null for a note that is in no collection (see Collections.kt). Saving the text never changes it. */
+    val collectionId: Long? = null
 )
 
 private const val UNTITLED_NOTE = "Untitled note"

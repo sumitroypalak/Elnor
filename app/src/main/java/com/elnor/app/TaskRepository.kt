@@ -26,6 +26,9 @@ interface TaskRepository {
 
     suspend fun delete(id: Long)
 
+    /** Puts the task in a collection, or takes it out ([collectionId] null). */
+    suspend fun setCollection(id: Long, collectionId: Long?)
+
     /** Deletes every finished task. Returns how many were deleted. */
     suspend fun clearCompleted(): Int
 }
@@ -69,6 +72,10 @@ class RoomTaskRepository(
     override suspend fun delete(id: Long) {
         dao.deleteById(id)
         reminders.cancel(id)
+    }
+
+    override suspend fun setCollection(id: Long, collectionId: Long?) {
+        dao.setCollection(id, collectionId)
     }
 
     override suspend fun clearCompleted(): Int {

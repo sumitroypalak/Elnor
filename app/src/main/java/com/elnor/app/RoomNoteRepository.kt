@@ -116,6 +116,10 @@ class RoomNoteRepository(
         for (chunk in ids.distinct().chunked(BATCH_SIZE)) dao.unarchiveMany(chunk)
     }
 
+    override suspend fun setCollection(ids: List<Long>, collectionId: Long?) {
+        for (chunk in ids.distinct().chunked(BATCH_SIZE)) dao.setCollection(chunk, collectionId)
+    }
+
     override suspend fun restore(id: Long) {
         dao.restore(id)
     }
