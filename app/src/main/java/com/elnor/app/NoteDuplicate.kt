@@ -13,6 +13,7 @@ internal const val COPY_SUFFIX = " (copy)"
  *  - [Note.updatedAt] is [now], so the copy is the newest note.
  *  - The copy is not pinned, not archived and not in the Trash, whatever the original is. The
  *    id is 0: the repository gives the copy its own id.
+ *  - The copy stays in the collection of the original (if it has one).
  */
 internal fun duplicateOf(note: Note, now: Long): Note = Note(
     id = 0L,
@@ -21,5 +22,6 @@ internal fun duplicateOf(note: Note, now: Long): Note = Note(
     updatedAt = now,
     deletedAt = null,
     pinnedAt = null,
-    archivedAt = null
+    archivedAt = null,
+    collectionId = note.collectionId
 )

@@ -29,6 +29,10 @@ class TaskReminderSyncTest {
             }
         }
 
+        override suspend fun setCollection(id: Long, collectionId: Long?) {
+            rows.value = rows.value.map { if (it.id == id) it.copy(collectionId = collectionId) else it }
+        }
+
         override suspend fun getById(id: Long): TaskEntity? = rows.value.firstOrNull { it.id == id }
 
         override suspend fun withUpcomingReminder(now: Long): List<TaskEntity> =

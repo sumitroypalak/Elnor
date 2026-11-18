@@ -17,11 +17,19 @@ import org.json.JSONArray
  * Version 4: adds the pinnedAt column (pinned notes, see NoteEntity).
  * Version 5: adds the archivedAt column (the Archive, see NoteEntity).
  * Version 6: adds the "tasks" table (the Task tab, see TaskEntity).
+ * Version 7: adds remindAt to the tasks (task reminders).
+ * Version 8: adds the "collections" table and collectionId to the notes and the tasks (the
+ * Collections tab, see CollectionEntity).
  */
-@Database(entities = [NoteEntity::class, TaskEntity::class], version = 7, exportSchema = false)
+@Database(
+    entities = [NoteEntity::class, TaskEntity::class, CollectionEntity::class],
+    version = 8,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
     abstract fun taskDao(): TaskDao
+    abstract fun collectionDao(): CollectionDao
 }
 
 /**
@@ -42,10 +50,29 @@ object ElnorDatabase {
         Room.databaseBuilder(appContext, AppDatabase::class.java, "elnor_notes_room.db")
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-                MIGRATION_6_7
+                MIGRATION_6_7, MIGRATION_7_8
             )
             .addCallback(LegacyNotesImport(appContext))
             .build()
+}
+
+/**
+ * Adds the empty "collections" table, and collectionId to the notes and the tasks. It is empty
+ * (NULL) for every note and task that already exists, so nothing is in a collection after the
+ * update. The column definitions must match the entities exactly, or Room refuses to open the
+ * database.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS collections (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "name TEXT NOT NULL, " +
+                "createdAt INTEGER NOT NULL)"
+        )
+        db.execSQL("ALTER TABLE notes ADD COLUMN collectionId INTEGER")
+        db.execSQL("ALTER TABLE tasks ADD COLUMN collectionId INTEGER")
+    }
 }
 
 /**

@@ -23,6 +23,10 @@ import androidx.room.PrimaryKey
  * - [archivedAt] is null for a normal note. An archived note has the time it was archived. It is
  *   kept out of the home list and the search, and shown on the Archive screen. Nothing else of
  *   the note changes (a pin stays too), so unarchiving puts everything back exactly as it was.
+ * - [collectionId] is the id of the collection the note is kept in (Collections tab), or null. A
+ *   note is in at most one collection. Saving the text never changes it, and the Trash and the
+ *   Archive keep it, so a restored note is back in its collection. When a collection is deleted
+ *   its notes get null again (see CollectionDao.delete).
  */
 @Entity(tableName = "notes")
 data class NoteEntity(
@@ -33,7 +37,8 @@ data class NoteEntity(
     val searchText: String,
     val deletedAt: Long? = null,
     val pinnedAt: Long? = null,
-    val archivedAt: Long? = null
+    val archivedAt: Long? = null,
+    val collectionId: Long? = null
 )
 
 fun NoteEntity.toNote(): Note = Note(
@@ -43,7 +48,8 @@ fun NoteEntity.toNote(): Note = Note(
     updatedAt = updatedAt,
     deletedAt = deletedAt,
     pinnedAt = pinnedAt,
-    archivedAt = archivedAt
+    archivedAt = archivedAt,
+    collectionId = collectionId
 )
 
 fun Note.toEntity(): NoteEntity = NoteEntity(
@@ -54,5 +60,6 @@ fun Note.toEntity(): NoteEntity = NoteEntity(
     searchText = SearchText.build(title, body),
     deletedAt = deletedAt,
     pinnedAt = pinnedAt,
-    archivedAt = archivedAt
+    archivedAt = archivedAt,
+    collectionId = collectionId
 )

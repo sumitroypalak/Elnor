@@ -203,7 +203,15 @@ internal fun ElnorBottomBar(
             interactionSource = newNoteSource
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Add, contentDescription = "New note", tint = colors.onNewNote)
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = when (selected) {
+                        HomeTab.TASK -> "New task"
+                        HomeTab.COLLECTION -> "New collection"
+                        else -> "New note"
+                    },
+                    tint = colors.onNewNote
+                )
             }
         }
     }

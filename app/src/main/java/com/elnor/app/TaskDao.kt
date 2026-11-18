@@ -24,6 +24,10 @@ interface TaskDao {
     @Query("UPDATE tasks SET title = :title, dueDate = :dueDate, remindAt = :remindAt WHERE id = :id")
     suspend fun updateDetails(id: Long, title: String, dueDate: Long?, remindAt: Long?)
 
+    /** Puts the task in a collection, or takes it out (null). Nothing else of the task changes. */
+    @Query("UPDATE tasks SET collectionId = :collectionId WHERE id = :id")
+    suspend fun setCollection(id: Long, collectionId: Long?)
+
     /** One task, or null when it does not exist (any more). */
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun getById(id: Long): TaskEntity?

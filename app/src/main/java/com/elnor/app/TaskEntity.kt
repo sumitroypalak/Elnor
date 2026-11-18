@@ -14,6 +14,8 @@ import androidx.room.PrimaryKey
  *   Unchecking it sets it back to null, and nothing else of the task changes.
  * - [remindAt] is the moment a notification is shown, in milliseconds since 1970, or null when
  *   the task has no reminder. It is independent of [dueDate]: a task can have either or both.
+ * - [collectionId] is the id of the collection the task is kept in (Collections tab), or null.
+ *   A task is in at most one collection. Editing the task never changes it.
  */
 @Entity(tableName = "tasks")
 data class TaskEntity(
@@ -22,7 +24,8 @@ data class TaskEntity(
     val createdAt: Long,
     val dueDate: Long? = null,
     val completedAt: Long? = null,
-    val remindAt: Long? = null
+    val remindAt: Long? = null,
+    val collectionId: Long? = null
 )
 
 /** The task as the screens see it. */
@@ -32,7 +35,8 @@ data class Task(
     val createdAt: Long,
     val dueDate: Long? = null,
     val completedAt: Long? = null,
-    val remindAt: Long? = null
+    val remindAt: Long? = null,
+    val collectionId: Long? = null
 ) {
     val isCompleted: Boolean get() = completedAt != null
 }
@@ -43,5 +47,6 @@ fun TaskEntity.toTask(): Task = Task(
     createdAt = createdAt,
     dueDate = dueDate,
     completedAt = completedAt,
-    remindAt = remindAt
+    remindAt = remindAt,
+    collectionId = collectionId
 )

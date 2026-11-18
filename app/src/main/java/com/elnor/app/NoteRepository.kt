@@ -73,6 +73,12 @@ interface NoteRepository {
     }
 
     /**
+     * Puts the notes in a collection, or takes them out of theirs ([collectionId] null). Only that
+     * one column changes. A repository without collections may ignore it.
+     */
+    suspend fun setCollection(ids: List<Long>, collectionId: Long?) {}
+
+    /**
      * "Delete" for the user: the note goes to the Trash and keeps all its data. Does nothing if
      * it no longer exists or is already in the Trash.
      */

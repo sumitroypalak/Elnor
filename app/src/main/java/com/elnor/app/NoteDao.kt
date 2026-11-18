@@ -123,6 +123,13 @@ interface NoteDao {
     @Query("UPDATE notes SET pinnedAt = :pinnedAt WHERE id = :id AND deletedAt IS NULL AND pinnedAt IS NULL")
     suspend fun restorePin(id: Long, pinnedAt: Long)
 
+    /**
+     * Puts notes in a collection, or takes them out (null). Title, body, updatedAt, the pin and the
+     * Archive are not touched, so moving a note never changes its place in the list.
+     */
+    @Query("UPDATE notes SET collectionId = :collectionId WHERE id IN (:ids)")
+    suspend fun setCollection(ids: List<Long>, collectionId: Long?)
+
     /** Removes the row for good. Only the Trash screen uses this. */
     @Query("DELETE FROM notes WHERE id = :id")
     suspend fun deleteById(id: Long)
