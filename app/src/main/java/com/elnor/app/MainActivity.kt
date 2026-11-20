@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 // ✏️ DEVELOPER INFO — change these 4 lines to your own details
 // ---------------------------------------------------------------------------
 internal const val DEVELOPER_NAME = "Sumit Roy"
-internal const val DEVELOPER_ROLE = "Email: sumitroypalak@gmail.com"
+internal const val DEVELOPER_ROLE = "Developer"
 internal const val DEVELOPER_GITHUB = "https://github.com/sumitroypalak"
 internal const val APP_VERSION = "1.0"
 // ----------------------------- Activity & root -----------------------------
