@@ -6,6 +6,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -80,6 +82,10 @@ internal fun TrashScreen(
     val selecting = selection.isNotEmpty()
     BackHandler(enabled = selecting) { selectedIds = emptySet() }
 
+    // The count of the bar that is fading out stays what it was, so it does not show "0"
+    val lastSelectedCount = remember { intArrayOf(0) }
+    if (selecting) lastSelectedCount[0] = selection.size
+
     // Opening the Trash also removes the notes that have been here for the chosen time. The list
     // updates by itself when they are gone.
     LaunchedEffect(Unit) {
@@ -90,67 +96,73 @@ internal fun TrashScreen(
         containerColor = bgColor,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            if (selecting) {
-                BulkSelectionTopBar(
-                    count = selection.size,
-                    containerColor = bgColor,
-                    onClose = { selectedIds = emptySet() },
-                    onSelectAll = { selectedIds = notes.orEmpty().map { it.id }.toSet() }
-                ) {
-                    TextButton(
-                        onClick = {
-                            val ids = selection
-                            selectedIds = emptySet()
-                            haptic(HapticKind.CONFIRM)
-                            ApplicationScope.scope.launch { repository.restoreMany(ids) }
-                            showPlainMessage(uiScope, snackbarHostState, restoredMessage(ids.size))
-                        }
+            Crossfade(
+                targetState = selecting,
+                animationSpec = Motion.short(),
+                label = "trashTopBar"
+            ) { selectingNow ->
+                if (selectingNow) {
+                    BulkSelectionTopBar(
+                        count = lastSelectedCount[0],
+                        containerColor = bgColor,
+                        onClose = { selectedIds = emptySet() },
+                        onSelectAll = { selectedIds = notes.orEmpty().map { it.id }.toSet() }
                     ) {
-                        Text("Restore")
-                    }
-                    IconButton(onClick = { confirmDeleteSelected = true }) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete selected notes forever",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            } else {
-                TopAppBar(
-                    title = { Text("Trash", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
+                        TextButton(
+                            onClick = {
+                                val ids = selection
+                                selectedIds = emptySet()
+                                haptic(HapticKind.CONFIRM)
+                                ApplicationScope.scope.launch { repository.restoreMany(ids) }
+                                showPlainMessage(uiScope, snackbarHostState, restoredMessage(ids.size))
+                            }
+                        ) {
+                            Text("Restore")
+                        }
+                        IconButton(onClick = { confirmDeleteSelected = true }) {
                             Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back"
+                                Icons.Default.Delete,
+                                contentDescription = "Delete selected notes forever",
+                                tint = MaterialTheme.colorScheme.error
                             )
                         }
-                    },
-                    actions = {
-                        if (!notes.isNullOrEmpty()) {
-                            // No question: nothing is lost by restoring
-                            TextButton(
-                                onClick = {
-                                    val ids = notes.map { it.id }
-                                    haptic(HapticKind.CONFIRM)
-                                    ApplicationScope.scope.launch { repository.restoreMany(ids) }
-                                    showPlainMessage(
-                                        uiScope,
-                                        snackbarHostState,
-                                        restoredMessage(ids.size)
-                                    )
+                    }
+                } else {
+                    TopAppBar(
+                        title = { Text("Trash", fontWeight = FontWeight.Bold) },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back"
+                                )
+                            }
+                        },
+                        actions = {
+                            if (!notes.isNullOrEmpty()) {
+                                // No question: nothing is lost by restoring
+                                TextButton(
+                                    onClick = {
+                                        val ids = notes.map { it.id }
+                                        haptic(HapticKind.CONFIRM)
+                                        ApplicationScope.scope.launch { repository.restoreMany(ids) }
+                                        showPlainMessage(
+                                            uiScope,
+                                            snackbarHostState,
+                                            restoredMessage(ids.size)
+                                        )
+                                    }
+                                ) {
+                                    Text("Restore all")
                                 }
-                            ) {
-                                Text("Restore all")
+                                TextButton(onClick = { confirmEmpty = true }) {
+                                    Text("Empty trash", color = MaterialTheme.colorScheme.error)
+                                }
                             }
-                            TextButton(onClick = { confirmEmpty = true }) {
-                                Text("Empty trash", color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
-                )
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
+                    )
+                }
             }
         }
     ) { padding ->
@@ -166,7 +178,8 @@ internal fun TrashScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 20.dp)
+                    .fadeInOnAppear(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -197,17 +210,20 @@ internal fun TrashScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(13.dp)
             ) {
-                item {
+                item(key = "trash-header") {
                     Text(
                         "Notes are deleted for good $trashDays days after they were " +
                             "moved here. Tap a note to read all of it. Touch and hold " +
                             "a note to select many.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+                        modifier = Modifier.animateItem()
                     )
                 }
                 items(notes, key = { it.id }) { note ->
                     TrashNoteCard(
+                        // A note that is restored or deleted fades out, the others close the gap
+                        modifier = Modifier.animateItem(),
                         note = note,
                         now = now,
                         retentionMs = trashRetention.millis,
@@ -330,15 +346,18 @@ private fun TrashNoteCard(
     onToggleSelect: () -> Unit,
     onLongClick: () -> Unit,
     onRestore: () -> Unit,
-    onDeleteForever: () -> Unit
+    onDeleteForever: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var expanded by rememberSaveable(note.id) { mutableStateOf(false) }
     val shape = MaterialTheme.shapes.extraLarge
 
     // Not Card(onClick = ...): that one has no long press. The clip makes the press ripple round.
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            // Tapping the card opens or closes the whole text smoothly
+            .animateContentSize(Motion.short())
             .clip(shape)
             .combinedClickable(
                 onClick = { if (selectionMode) onToggleSelect() else expanded = !expanded },

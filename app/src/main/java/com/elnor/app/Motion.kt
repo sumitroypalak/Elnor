@@ -3,6 +3,7 @@ package com.elnor.app
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
@@ -13,6 +14,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 
 /**
  * The motion of the whole app in one place: how long it takes, how it speeds up and slows down,
@@ -74,4 +80,16 @@ internal object Motion {
     val fadeInShort: EnterTransition get() = fadeIn(short())
 
     val fadeOutShort: ExitTransition get() = fadeOut(short())
+}
+
+/**
+ * Fades the content in when it first appears, so an empty-state message does not pop in. It uses
+ * the same short fade as the rest of the app ([Motion.short]) and follows the phone's "Remove
+ * animations" setting.
+ */
+@Composable
+internal fun Modifier.fadeInOnAppear(): Modifier {
+    val alpha = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { alpha.animateTo(1f, Motion.short()) }
+    return graphicsLayer { this.alpha = alpha.value }
 }
