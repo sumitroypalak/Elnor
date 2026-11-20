@@ -3,6 +3,7 @@
 package com.elnor.app
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -93,27 +94,39 @@ internal fun CollectionsScreen(
             .padding(padding)
             .padding(horizontal = 20.dp)
     ) {
-        if (open != null) {
-            CollectionDetail(
-                collection = open,
-                counts = counts[open.id],
-                allCollections = sorted,
-                notes = remember(notes, open.id) { notesInCollection(notes, open.id) },
-                tasks = remember(tasks, open.id) { tasksInCollection(tasks, open.id) },
-                onBack = { onOpenChange(null) },
-                onOpenNote = onOpenNote,
-                onRename = onRename,
-                onDelete = onDelete,
-                onRemoveNote = onRemoveNote,
-                onToggleTask = onToggleTask,
-                onRemoveTask = onRemoveTask
-            )
-        } else {
-            CollectionList(
-                collections = if (collections == null) null else sorted,
-                counts = counts,
-                onOpen = { onOpenChange(it.id) }
-            )
+        // The list and an open collection slide into each other. The id is the state, so renaming
+        // the open collection does not play the slide again.
+        AnimatedContent(
+            targetState = open?.id,
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = { Motion.sideways(forward = targetState != null) },
+            label = "collectionOpen"
+        ) { shownId ->
+            val shown = sorted.firstOrNull { it.id == shownId }
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (shown != null) {
+                    CollectionDetail(
+                        collection = shown,
+                        counts = counts[shown.id],
+                        allCollections = sorted,
+                        notes = remember(notes, shown.id) { notesInCollection(notes, shown.id) },
+                        tasks = remember(tasks, shown.id) { tasksInCollection(tasks, shown.id) },
+                        onBack = { onOpenChange(null) },
+                        onOpenNote = onOpenNote,
+                        onRename = onRename,
+                        onDelete = onDelete,
+                        onRemoveNote = onRemoveNote,
+                        onToggleTask = onToggleTask,
+                        onRemoveTask = onRemoveTask
+                    )
+                } else if (shownId == null) {
+                    CollectionList(
+                        collections = if (collections == null) null else sorted,
+                        counts = counts,
+                        onOpen = { onOpenChange(it.id) }
+                    )
+                }
+            }
         }
     }
 }
@@ -146,7 +159,8 @@ private fun CollectionList(
         ) {
             items(collections, key = { it.id }) { collection ->
                 CollectionCard(
-                    modifier = Modifier,
+                    // A collection that is added, deleted or renamed slides to its new place
+                    modifier = Modifier.animateItem(),
                     name = collection.name,
                     label = collectionCountsLabel(counts[collection.id]),
                     onClick = { onOpen(collection) }
@@ -161,7 +175,8 @@ private fun EmptyCollections() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(bottom = 120.dp),
+            .padding(bottom = 120.dp)
+            .fadeInOnAppear(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -267,7 +282,8 @@ private fun CollectionDetail(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 120.dp),
+                .padding(bottom = 120.dp)
+                .fadeInOnAppear(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -291,9 +307,9 @@ private fun CollectionDetail(
             contentPadding = PaddingValues(bottom = 120.dp)
         ) {
             if (notes.isNotEmpty()) {
-                item(key = "notes-header") { SectionHeader("Notes") }
+                item(key = "notes-header") { SectionHeader("Notes", Modifier.animateItem()) }
                 items(notes, key = { "note-${it.id}" }) { note ->
-                    ItemCard(onClick = { onOpenNote(note.id) }) {
+                    ItemCard(modifier = Modifier.animateItem(), onClick = { onOpenNote(note.id) }) {
                         val preview = remember(note) { firstPreviewLine(note) }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -318,9 +334,13 @@ private fun CollectionDetail(
                 }
             }
             if (tasks.isNotEmpty()) {
-                item(key = "tasks-header") { SectionHeader("Tasks") }
+                item(key = "tasks-header") { SectionHeader("Tasks", Modifier.animateItem()) }
                 items(tasks, key = { "task-${it.id}" }) { task ->
-                    ItemCard(onClick = { onToggleTask(task.id, !task.isCompleted) }, startPadding = 0) {
+                    ItemCard(
+                        modifier = Modifier.animateItem(),
+                        onClick = { onToggleTask(task.id, !task.isCompleted) },
+                        startPadding = 0
+                    ) {
                         Checkbox(checked = task.isCompleted, onCheckedChange = { onToggleTask(task.id, it) })
                         val onSurface = MaterialTheme.colorScheme.onSurface
                         Text(
@@ -370,24 +390,25 @@ private fun CollectionDetail(
 }
 
 @Composable
-private fun SectionHeader(text: String) {
+private fun SectionHeader(text: String, modifier: Modifier = Modifier) {
     Text(
         text,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
-        modifier = Modifier.padding(top = 4.dp)
+        modifier = modifier.padding(top = 4.dp)
     )
 }
 
 /** A card with one row inside: used for the notes and the tasks of a collection. */
 @Composable
 private fun ItemCard(
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
     startPadding: Int = 16,
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

@@ -2,6 +2,11 @@
 
 package com.elnor.app
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -97,11 +102,22 @@ fun TasksScreen(
             }
         }
 
-        if (completedCount > 0 && filter != TaskFilter.ACTIVE) {
+        // "Clear completed" opens and closes smoothly. While it is away, a small gap stays in its place.
+        val showClear = completedCount > 0 && filter != TaskFilter.ACTIVE
+        AnimatedVisibility(
+            visible = showClear,
+            enter = expandVertically(Motion.short()) + fadeIn(Motion.short()),
+            exit = shrinkVertically(Motion.short()) + fadeOut(Motion.short())
+        ) {
             TextButton(onClick = { confirmClear = true }) {
                 Text("Clear completed")
             }
-        } else {
+        }
+        AnimatedVisibility(
+            visible = !showClear,
+            enter = expandVertically(Motion.short()),
+            exit = shrinkVertically(Motion.short())
+        ) {
             Spacer(Modifier.height(8.dp))
         }
 
@@ -241,7 +257,8 @@ private fun EmptyTasks(filter: TaskFilter, hasAnyTask: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(bottom = 120.dp),
+            .padding(bottom = 120.dp)
+            .fadeInOnAppear(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {

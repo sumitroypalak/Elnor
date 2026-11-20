@@ -3,6 +3,7 @@
 package com.elnor.app
 
 import android.view.View
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -108,11 +109,18 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        themeMode.label(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                    )
+                    // The choice fades into the new one when it changes
+                    Crossfade(
+                        targetState = themeMode.label(),
+                        animationSpec = Motion.short(),
+                        label = "themeLabel"
+                    ) { label ->
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        )
+                    }
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
@@ -131,11 +139,18 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        fontSize.label(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                    )
+                    // The choice fades into the new one when it changes
+                    Crossfade(
+                        targetState = fontSize.label(),
+                        animationSpec = Motion.short(),
+                        label = "fontSizeLabel"
+                    ) { label ->
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        )
+                    }
                 }
 
                 // Third row: the colours of the wallpaper. Only phones with Android 12 or newer can

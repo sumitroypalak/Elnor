@@ -2,6 +2,7 @@
 
 package com.elnor.app
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -96,6 +97,12 @@ private fun DrawerItem(label: String, icon: ImageVector, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val colors = MaterialTheme.colorScheme
+    // The pill fades in and out while the row is pressed, it does not jump
+    val container by animateColorAsState(
+        targetValue = if (pressed) colors.primaryContainer else colors.primaryContainer.copy(alpha = 0f),
+        animationSpec = Motion.short(),
+        label = "drawerItemPill"
+    )
 
     NavigationDrawerItem(
         label = {
@@ -113,8 +120,8 @@ private fun DrawerItem(label: String, icon: ImageVector, onClick: () -> Unit) {
             .height(52.dp),
         shape = CircleShape,
         colors = NavigationDrawerItemDefaults.colors(
-            selectedContainerColor = colors.primaryContainer,
-            unselectedContainerColor = Color.Transparent,
+            selectedContainerColor = container,
+            unselectedContainerColor = container,
             selectedIconColor = colors.onPrimaryContainer,
             unselectedIconColor = colors.onSurface,
             selectedTextColor = colors.onPrimaryContainer,
