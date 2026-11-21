@@ -5,6 +5,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -73,6 +74,23 @@ internal object Motion {
                 targetContentZIndex = -1f
             }
         }
+
+    /**
+     * A screen or page closes because of Back (the arrow, the button, or the Back gesture). The
+     * screen behind it is already there and does not move; the page that closes is drawn by
+     * BackPreviewLayer (it shrinks, follows the finger, gets round corners and fades away). The
+     * page that closes stays on top while it goes.
+     *
+     * The exit has to be a real animation: it is what keeps the closing page on the screen until
+     * the animation is over. It is almost invisible (alpha 1 to 0.99), BackPreviewLayer does the
+     * drawing. It is linear, so the page follows the finger one to one.
+     */
+    fun backPreview(): ContentTransform =
+        EnterTransition.None
+            .togetherWith(
+                fadeOut(tween(durationMillis = STANDARD_MS, easing = LinearEasing), targetAlpha = 0.99f)
+            )
+            .apply { targetContentZIndex = -1f }
 
     // ---- Small parts that come and go ----
 

@@ -88,18 +88,26 @@ internal fun HomeLayout(
                 // each other.
                 editorTransition.AnimatedContent(
                     modifier = Modifier.fillMaxSize().background(bgColor),
-                    transitionSpec = { Motion.page(opening = targetState) }
+                    // Opening rises a little; closing (Back) is the preview, see BackPreviewLayer
+                    transitionSpec = { if (targetState) Motion.page(opening = true) else Motion.backPreview() }
                 ) { showEditor ->
                     // A page that is already sliding out must not answer Back again (the editor would save
                     // and close twice). Registered after the page below, so it is asked first. Not while
                     // the finger is still moving: a new Back handler then would disturb the gesture.
                     val leaving = transition.targetState == EnterExitState.PostExit &&
                         !editorBackGesture.active
-                    if (showEditor) {
-                        editorPane()
-                        BackHandler(enabled = leaving) { }
-                    } else {
-                        listPane()
+                    val closing = editorTransition.currentState && !editorTransition.targetState
+                    BackPreviewLayer(
+                        leavingByBack = closing && showEditor,
+                        enteringByBack = closing && !showEditor,
+                        gesture = editorBackGesture
+                    ) {
+                        if (showEditor) {
+                            editorPane()
+                            BackHandler(enabled = leaving) { }
+                        } else {
+                            listPane()
+                        }
                     }
                 }
             }

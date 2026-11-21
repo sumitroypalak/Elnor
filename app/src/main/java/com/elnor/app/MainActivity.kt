@@ -8,6 +8,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.BackEventCompat
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -280,7 +281,11 @@ fun ElnorRoot(
                 val screenGesture = remember { BackGesture() }
                 PredictiveBackHandler(enabled = screen != AppScreen.HOME) { progress ->
                     try {
-                        progress.collect { event -> screenGesture.update(event.progress) }
+                        progress.collect { event ->
+                            screenGesture.update(
+                                event.progress, event.swipeEdge == BackEventCompat.EDGE_RIGHT, event.touchY
+                            )
+                        }
                         // Order matters: change the screen first, then end the gesture
                         screen = backTarget
                         screenGesture.end()
@@ -304,8 +309,19 @@ fun ElnorRoot(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
-                    transitionSpec = { Motion.sideways(forward = targetState.depth > initialState.depth) }
+                    // Going in slides a little; going back (arrow, button or gesture) is the preview
+                    transitionSpec = {
+                        if (targetState.depth > initialState.depth) Motion.sideways(forward = true)
+                        else Motion.backPreview()
+                    }
                 ) { shownScreen ->
+                // Going back: the screen that is left closes like a photo (see BackPreviewLayer)
+                val goingBack = screenTransition.targetState.depth < screenTransition.currentState.depth
+                BackPreviewLayer(
+                    leavingByBack = goingBack && shownScreen == screenTransition.currentState,
+                    enteringByBack = goingBack && shownScreen == screenTransition.targetState,
+                    gesture = screenGesture
+                ) {
                 when (shownScreen) {
                     AppScreen.SETTINGS -> {
                         SettingsScreen(
@@ -384,6 +400,7 @@ fun ElnorRoot(
                             onOpenTrash = { screen = AppScreen.TRASH }
                         )
                     }
+                }
                 }
                 }
             }
