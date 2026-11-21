@@ -14,7 +14,14 @@
         cloud backup / adb backup, where the App lock does not protect it. Elnor has its own
         backup file (Settings > Backup & restore) for moving notes between phones.
     -->
+    <!--
+        Predictive back (Android 13 and newer): the system shows a preview of where Back goes, for
+        example the home screen when Back is pressed on Elnor's home screen. Elnor's own Back steps
+        (Settings, Archive, Trash, the open note) are Compose BackHandlers, which keep working as
+        before. On older Android versions this line has no effect.
+    -->
     <application
+        android:enableOnBackInvokedCallback="true"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
