@@ -459,12 +459,14 @@ private fun ThemeMode.label(): String = when (this) {
     ThemeMode.LIGHT -> "Light"
     ThemeMode.DARK -> "Dark"
     ThemeMode.SYSTEM -> "System default"
+    ThemeMode.AMOLED -> "Pure black (AMOLED)"
 }
 
-private val themeChoices = listOf(ThemeMode.LIGHT, ThemeMode.DARK, ThemeMode.SYSTEM)
+private val themeChoices =
+    listOf(ThemeMode.LIGHT, ThemeMode.DARK, ThemeMode.SYSTEM, ThemeMode.AMOLED)
 
 /**
- * "Choose theme": three radio buttons, the current one is checked.
+ * "Choose theme": four radio buttons, the current one is checked.
  * Tapping a row selects it at once (the caller applies it and closes the dialog).
  * Tapping outside, the Back button or Cancel closes it without a change.
  */
