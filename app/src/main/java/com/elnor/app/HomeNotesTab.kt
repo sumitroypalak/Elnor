@@ -3,6 +3,7 @@
 package com.elnor.app
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -368,11 +369,12 @@ private fun ColumnScope.NotesBody(
                 )
             }
         } else {
-            // The list and the grid fade into each other when the view is switched
-            Crossfade(
+            // The list and the grid "fade through" when the view is switched: the old one fades out,
+            // then the new one fades in and grows a little (see Motion.fadeThrough)
+            AnimatedContent(
                 targetState = viewMode,
                 modifier = Modifier.fillMaxSize(),
-                animationSpec = Motion.short(),
+                transitionSpec = { Motion.fadeThrough() },
                 label = "viewMode"
             ) { shownMode ->
                 if (shownMode == NotesViewMode.LIST) {

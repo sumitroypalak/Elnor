@@ -4,12 +4,15 @@ import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -91,6 +94,30 @@ internal object Motion {
                 fadeOut(tween(durationMillis = STANDARD_MS, easing = LinearEasing), targetAlpha = 0.99f)
             )
             .apply { targetContentZIndex = -1f }
+
+    /**
+     * One layout is replaced by another of the same size but a different arrangement (the list and
+     * the grid of notes). A plain cross-fade shows both half see-through on top of each other,
+     * which looks like a flash. This is the Material "fade through": the old one fades out first
+     * and quickly, then the new one fades in while it grows a little from [FADE_THROUGH_SCALE]
+     * to its full size. [FADE_THROUGH_MS] in all.
+     */
+    fun fadeThrough(): ContentTransform {
+        val out = FADE_THROUGH_OUT_MS
+        val into = FADE_THROUGH_MS - out
+        return (
+            fadeIn(tween(durationMillis = into, delayMillis = out, easing = LinearOutSlowInEasing)) +
+                scaleIn(
+                    animationSpec = tween(durationMillis = into, delayMillis = out, easing = LinearOutSlowInEasing),
+                    initialScale = FADE_THROUGH_SCALE
+                )
+            ).togetherWith(fadeOut(tween(durationMillis = out, easing = FastOutLinearInEasing)))
+    }
+
+    /** The whole "fade through": the old one goes in [FADE_THROUGH_OUT_MS], then the new one comes. */
+    const val FADE_THROUGH_MS = 300
+    private const val FADE_THROUGH_OUT_MS = 90
+    private const val FADE_THROUGH_SCALE = 0.92f
 
     // ---- Small parts that come and go ----
 
