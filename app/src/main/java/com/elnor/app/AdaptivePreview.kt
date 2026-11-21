@@ -68,10 +68,11 @@ private class PreviewNoteRepository(private val all: List<Note>) : NoteRepositor
 
 private class PreviewTaskRepository(private val all: List<Task>) : TaskRepository {
     override val tasks: Flow<List<Task>> = flowOf(all)
-    override suspend fun add(title: String, dueDate: Long?): Long? = null
-    override suspend fun update(id: Long, title: String, dueDate: Long?) = Unit
+    override suspend fun add(title: String, dueDate: Long?, remindAt: Long?): Long? = null
+    override suspend fun update(id: Long, title: String, dueDate: Long?, remindAt: Long?) = Unit
     override suspend fun setCompleted(id: Long, completed: Boolean) = Unit
     override suspend fun delete(id: Long) = Unit
+    override suspend fun setCollection(id: Long, collectionId: Long?) = Unit
     override suspend fun clearCompleted(): Int = 0
 }
 
