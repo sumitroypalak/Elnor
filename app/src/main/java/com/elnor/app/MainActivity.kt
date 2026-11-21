@@ -8,7 +8,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -30,6 +30,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------------------
@@ -268,24 +269,42 @@ fun ElnorRoot(
                 // Back goes one step up. These are here, outside the animation, and look at the
                 // screen that is being opened: while a screen is still sliding out, it must not
                 // answer Back a second time.
-                BackHandler(
-                    enabled = screen == AppScreen.SETTINGS || screen == AppScreen.ARCHIVE ||
-                        screen == AppScreen.TRASH
-                ) { screen = AppScreen.HOME }
-                BackHandler(
-                    enabled = screen == AppScreen.BACKUP || screen == AppScreen.APP_LOCK
-                ) { screen = AppScreen.SETTINGS }
+                // Predictive back: with the Back gesture the screen follows the finger and the
+                // screen behind it is already visible (see PredictiveBack.kt). The home screen has
+                // no handler here, so the system shows its own "back to the phone's home" preview.
+                val backTarget = when (screen) {
+                    AppScreen.SETTINGS, AppScreen.ARCHIVE, AppScreen.TRASH -> AppScreen.HOME
+                    AppScreen.BACKUP, AppScreen.APP_LOCK -> AppScreen.SETTINGS
+                    AppScreen.HOME -> AppScreen.HOME
+                }
+                val screenGesture = remember { BackGesture() }
+                PredictiveBackHandler(enabled = screen != AppScreen.HOME) { progress ->
+                    try {
+                        progress.collect { event -> screenGesture.update(event.progress) }
+                        // Order matters: change the screen first, then end the gesture
+                        screen = backTarget
+                        screenGesture.end()
+                    } catch (e: CancellationException) {
+                        screenGesture.cancel()
+                        throw e
+                    }
+                }
+                val screenTransition = rememberBackTransition(
+                    target = screen,
+                    backTarget = backTarget,
+                    canGoBack = screen != AppScreen.HOME,
+                    gesture = screenGesture,
+                    label = "screen"
+                )
 
                 // A screen opens with a small slide and a fade (to the right going in, back to the
                 // left going out). The background behind keeps the page colour while two screens
                 // fade over each other.
-                AnimatedContent(
-                    targetState = screen,
+                screenTransition.AnimatedContent(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
-                    transitionSpec = { Motion.sideways(forward = targetState.depth > initialState.depth) },
-                    label = "screen"
+                    transitionSpec = { Motion.sideways(forward = targetState.depth > initialState.depth) }
                 ) { shownScreen ->
                 when (shownScreen) {
                     AppScreen.SETTINGS -> {
