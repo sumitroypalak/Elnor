@@ -62,7 +62,9 @@ class MainActivity : FragmentActivity() {
         val initialDark = initialThemeMode.isDark(systemDark)
         // The page colour of the theme in use: the wallpaper colours when the user turned them on
         // (Android 12+), otherwise the Elnor colours. The same one ElnorTheme will use.
-        val initialColors = elnorColorScheme(initialDark, this, loadDynamicColor(applicationContext))
+        val initialColors = elnorColorScheme(
+            initialDark, this, loadDynamicColor(applicationContext), initialThemeMode.isAmoled
+        )
         applyWindowTheme(window, window.decorView, initialDark, initialColors.background)
 
         // The saved haptic switch, read before the first screen is drawn
@@ -249,7 +251,12 @@ fun ElnorRoot(
     }
 
     CompositionLocalProvider(LocalWindowClass provides windowClass) {
-    ElnorTheme(darkTheme = darkTheme, fontScale = fontSize.scale, dynamicColor = dynamicColor) {
+    ElnorTheme(
+        darkTheme = darkTheme,
+        fontScale = fontSize.scale,
+        dynamicColor = dynamicColor,
+        amoled = themeMode.isAmoled
+    ) {
         Box(Modifier.fillMaxSize()) {
             // The screens stay composed while locked (an open note is still there after unlocking),
             // but they are hidden from touch and from screen readers by the lock screen above.

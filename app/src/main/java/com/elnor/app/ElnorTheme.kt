@@ -141,20 +141,46 @@ private fun elnorLightColorScheme(): ColorScheme = lightColorScheme(
     surfaceContainerHighest = Color(0xFFE2E2E9)
 )
 
-/** The only place where the app's light and dark colours are defined. */
-fun elnorColorScheme(dark: Boolean): ColorScheme =
-    if (dark) elnorDarkColorScheme() else elnorLightColorScheme()
+/**
+ * The pure black (AMOLED) look: [this] dark scheme with a black page. Only the colours of the page
+ * itself are changed ("background", "surfaceDim" and the lowest container step), so the cards, the
+ * search field and the bottom bar keep their colours and stand out from the black page, and the
+ * text and the accents stay exactly as in the dark theme. It works on the Elnor colours and on the
+ * wallpaper colours alike. It is meant for a dark scheme only.
+ */
+internal fun ColorScheme.toAmoled(): ColorScheme = copy(
+    background = Color.Black,
+    surfaceDim = Color.Black,
+    surfaceContainerLowest = Color.Black
+)
+
+/**
+ * The only place where the app's light and dark colours are defined. [amoled] = true makes the
+ * dark theme pure black ([toAmoled]); it is ignored for the light theme.
+ */
+fun elnorColorScheme(dark: Boolean, amoled: Boolean = false): ColorScheme = when {
+    !dark -> elnorLightColorScheme()
+    amoled -> elnorDarkColorScheme().toAmoled()
+    else -> elnorDarkColorScheme()
+}
 
 /**
  * The colours the app really uses: the colours of the wallpaper when [dynamic] is on and this phone
  * can do it ([supportsDynamicColor]), the Elnor colours in every other case. It never fails: a phone
- * that cannot (or a [context] of null) gets the Elnor colours.
+ * that cannot (or a [context] of null) gets the Elnor colours. [amoled] = true gives the dark
+ * scheme a pure black page, in both cases (and is ignored for the light theme).
  */
-fun elnorColorScheme(dark: Boolean, context: Context?, dynamic: Boolean): ColorScheme =
+fun elnorColorScheme(
+    dark: Boolean,
+    context: Context?,
+    dynamic: Boolean,
+    amoled: Boolean = false
+): ColorScheme =
     if (context != null && dynamicColorActive(dynamic, Build.VERSION.SDK_INT)) {
-        wallpaperColorScheme(context, dark)
+        val scheme = wallpaperColorScheme(context, dark)
+        if (dark && amoled) scheme.toAmoled() else scheme
     } else {
-        elnorColorScheme(dark)
+        elnorColorScheme(dark, amoled)
     }
 
 /**
@@ -187,12 +213,15 @@ internal fun applyWindowTheme(
  * > Font size). 1 is the normal size.
  * [dynamicColor] asks for the colours of the wallpaper (Settings > Appearance > Dynamic colour). It
  * only has an effect on Android 12 and newer.
+ * [amoled] makes the dark theme pure black (Settings > Appearance > Theme > Pure black). It has no
+ * effect on the light theme.
  */
 @Composable
 fun ElnorTheme(
     darkTheme: Boolean,
     fontScale: Float = 1f,
     dynamicColor: Boolean = false,
+    amoled: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -201,8 +230,8 @@ fun ElnorTheme(
         dynamicColorActive(true, Build.VERSION.SDK_INT)
     // The wallpaper colours are read again when the phone's theme or wallpaper changes (the
     // activity is recreated then), and when the switch or the light/dark mode changes
-    val colors = remember(darkTheme, useDynamic, context) {
-        elnorColorScheme(darkTheme, context, useDynamic)
+    val colors = remember(darkTheme, useDynamic, amoled, context) {
+        elnorColorScheme(darkTheme, context, useDynamic, amoled)
     }
     // Built again only when the font size changes
     val typography = remember(fontScale) { elnorTypography(fontScale) }
