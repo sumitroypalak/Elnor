@@ -32,8 +32,17 @@ internal fun HomeLayout(
     onSelectTab: (HomeTab) -> Unit,
     onNewNote: () -> Unit,
     listPane: @Composable () -> Unit,
-    editorPane: @Composable () -> Unit
+    editorPane: @Composable () -> Unit,
+    editorBackGesture: BackGesture
 ) {
+    // The editor page and the list: a normal change plays the animation, a Back gesture follows the finger
+    val editorTransition = rememberBackTransition(
+        target = editorOpen,
+        backTarget = false,
+        canGoBack = editorOpen && !twoPane,
+        gesture = editorBackGesture,
+        label = "homeEditor"
+    )
     Row(Modifier.fillMaxSize().background(bgColor)) {
         // The tabs and the round "+" button are on the left edge, before the list and the editor
         if (showRail) {
@@ -77,15 +86,15 @@ internal fun HomeLayout(
                 // The editor page rises a little and fades in over the list; when it closes it fades away
                 // and the list shows through. The page colour behind keeps the two from showing through
                 // each other.
-                AnimatedContent(
-                    targetState = editorOpen,
+                editorTransition.AnimatedContent(
                     modifier = Modifier.fillMaxSize().background(bgColor),
-                    transitionSpec = { Motion.page(opening = targetState) },
-                    label = "homeEditor"
+                    transitionSpec = { Motion.page(opening = targetState) }
                 ) { showEditor ->
                     // A page that is already sliding out must not answer Back again (the editor would save
-                    // and close twice). Registered after the page below, so it is asked first.
-                    val leaving = transition.targetState == EnterExitState.PostExit
+                    // and close twice). Registered after the page below, so it is asked first. Not while
+                    // the finger is still moving: a new Back handler then would disturb the gesture.
+                    val leaving = transition.targetState == EnterExitState.PostExit &&
+                        !editorBackGesture.active
                     if (showEditor) {
                         editorPane()
                         BackHandler(enabled = leaving) { }

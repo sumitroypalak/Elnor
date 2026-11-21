@@ -391,6 +391,9 @@ fun ElnorApp(
         )
     }
 
+    // How far the Back gesture of the editor has gone (predictive back, see PredictiveBack.kt)
+    val editorBackGesture = remember { BackGesture() }
+
     // The editor: the page of one note (or a new note)
     val editorPane: @Composable () -> Unit = {
         key(editorSession) {
@@ -407,6 +410,7 @@ fun ElnorApp(
                     onClose = { editorOpen = false },
                     linkHost = noteLinkHost,
                     initialTitle = newNoteTitle,
+                    backGesture = editorBackGesture,
                     // The editor already moved the note to the Trash. The list shows the message.
                     onNoteDeleted = { deleted ->
                         uiScope.launch { showDeleteUndo(snackbarHostState, repository, listOf(deleted)) }
@@ -594,6 +598,7 @@ fun ElnorApp(
         onSelectTab = { selectHomeTab(it) },
         onNewNote = { onNewNoteClick() },
         listPane = listPane,
-        editorPane = editorPane
+        editorPane = editorPane,
+        editorBackGesture = editorBackGesture
     )
 }

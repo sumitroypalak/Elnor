@@ -3,6 +3,7 @@
 package com.elnor.app
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -20,6 +21,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -48,7 +50,12 @@ fun EditorScreen(
      */
     linkHost: NoteLinkHost? = null,
     /** The title a new note starts with (a note made from a link that pointed to nothing). */
-    initialTitle: String = ""
+    initialTitle: String = "",
+    /**
+     * Where the progress of the Back gesture goes, so the screen that shows this page can let it
+     * follow the finger (predictive back). null = the page just closes.
+     */
+    backGesture: BackGesture? = null
 ) {
     val bgColor = MaterialTheme.colorScheme.background
     // A phone held sideways has very little height: the bars above and below the text get smaller
@@ -310,7 +317,20 @@ fun EditorScreen(
         }
     }
 
-    BackHandler { saveAndClose() }
+    // The Back gesture: while the finger moves, [backGesture] gets the progress and the screen that
+    // shows this page follows it. Finishing the gesture (or the Back button, which has no
+    // progress) saves and closes the page. Order matters: saveAndClose changes what is shown, and
+    // only then the gesture is ended, so the closing animation goes on from where the finger was.
+    PredictiveBackHandler { progress ->
+        try {
+            progress.collect { event -> backGesture?.update(event.progress) }
+            saveAndClose()
+            backGesture?.end()
+        } catch (e: CancellationException) {
+            backGesture?.cancel()
+            throw e
+        }
+    }
     // Registered after the one above, so it wins: Back closes the Find bar first
     BackHandler(enabled = findOpen) { closeFind() }
 

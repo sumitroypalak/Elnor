@@ -72,14 +72,21 @@ internal fun ArchiveScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val uiScope = rememberCoroutineScope()
 
-    // The editor rises a little and fades in over the list, and fades away when it closes
-    AnimatedContent(
-        targetState = editingId,
+    // The editor rises a little and fades in over the list, and fades away when it closes. The Back
+    // gesture of the editor makes it follow the finger (predictive back, see PredictiveBack.kt).
+    val editorGesture = remember { BackGesture() }
+    val editorTransition = rememberBackTransition(
+        target = editingId,
+        backTarget = null,
+        canGoBack = editingId != null,
+        gesture = editorGesture,
+        label = "archiveEditor"
+    )
+    editorTransition.AnimatedContent(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        transitionSpec = { Motion.page(opening = targetState != null) },
-        label = "archiveEditor"
+        transitionSpec = { Motion.page(opening = targetState != null) }
     ) { shownId ->
         ArchiveContent(
             repository = repository,
@@ -87,7 +94,8 @@ internal fun ArchiveScreen(
             notes = archived,
             openId = shownId,
             // A page that is already sliding out must not answer Back a second time
-            leaving = transition.targetState == EnterExitState.PostExit,
+            leaving = transition.targetState == EnterExitState.PostExit && !editorGesture.active,
+            backGesture = editorGesture,
             query = query,
             onQueryChange = { query = it },
             selectedIds = selectedIds,
@@ -112,6 +120,7 @@ private fun ArchiveContent(
     notes: List<Note>?,
     openId: Long?,
     leaving: Boolean,
+    backGesture: BackGesture,
     query: String,
     onQueryChange: (String) -> Unit,
     selectedIds: Set<Long>,
@@ -149,6 +158,7 @@ private fun ArchiveContent(
                     note = editing,
                     viewModel = editorViewModel,
                     onClose = onCloseEditor,
+                    backGesture = backGesture,
                     // The editor already moved the note to the Trash. The list shows the message.
                     onNoteDeleted = { deleted ->
                         uiScope.launch {
