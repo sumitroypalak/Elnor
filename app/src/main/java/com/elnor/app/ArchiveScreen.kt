@@ -86,29 +86,37 @@ internal fun ArchiveScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        transitionSpec = { Motion.page(opening = targetState != null) }
+        // Opening rises a little; closing (Back) is the preview, see BackPreviewLayer
+        transitionSpec = { if (targetState != null) Motion.page(opening = true) else Motion.backPreview() }
     ) { shownId ->
-        ArchiveContent(
-            repository = repository,
-            editorViewModel = editorViewModel,
-            notes = archived,
-            openId = shownId,
-            // A page that is already sliding out must not answer Back a second time
-            leaving = transition.targetState == EnterExitState.PostExit && !editorGesture.active,
-            backGesture = editorGesture,
-            query = query,
-            onQueryChange = { query = it },
-            selectedIds = selectedIds,
-            onSelectedChange = { selectedIds = it },
-            onOpenNote = {
-                selectedIds = emptySet()
-                editingId = it
-            },
-            onCloseEditor = { editingId = null },
-            onBack = onBack,
-            snackbarHostState = snackbarHostState,
-            uiScope = uiScope
-        )
+        val closing = editorTransition.currentState != null && editorTransition.targetState == null
+        BackPreviewLayer(
+            leavingByBack = closing && shownId != null,
+            enteringByBack = closing && shownId == null,
+            gesture = editorGesture
+        ) {
+            ArchiveContent(
+                repository = repository,
+                editorViewModel = editorViewModel,
+                notes = archived,
+                openId = shownId,
+                // A page that is already sliding out must not answer Back a second time
+                leaving = transition.targetState == EnterExitState.PostExit && !editorGesture.active,
+                backGesture = editorGesture,
+                query = query,
+                onQueryChange = { query = it },
+                selectedIds = selectedIds,
+                onSelectedChange = { selectedIds = it },
+                onOpenNote = {
+                    selectedIds = emptySet()
+                    editingId = it
+                },
+                onCloseEditor = { editingId = null },
+                onBack = onBack,
+                snackbarHostState = snackbarHostState,
+                uiScope = uiScope
+            )
+        }
     }
 }
 

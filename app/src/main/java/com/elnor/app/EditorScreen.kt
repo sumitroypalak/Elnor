@@ -3,6 +3,7 @@
 package com.elnor.app
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -323,7 +324,11 @@ fun EditorScreen(
     // only then the gesture is ended, so the closing animation goes on from where the finger was.
     PredictiveBackHandler { progress ->
         try {
-            progress.collect { event -> backGesture?.update(event.progress) }
+            progress.collect { event ->
+                backGesture?.update(
+                    event.progress, event.swipeEdge == BackEventCompat.EDGE_RIGHT, event.touchY
+                )
+            }
             saveAndClose()
             backGesture?.end()
         } catch (e: CancellationException) {
