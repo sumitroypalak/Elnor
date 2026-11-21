@@ -1,5 +1,6 @@
 package com.elnor.app
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,6 +15,14 @@ class AmoledThemeTest {
 
     private val dark = elnorColorScheme(dark = true)
     private val amoled = elnorColorScheme(dark = true, amoled = true)
+
+    /**
+     * ColorScheme has no equals (two schemes with the same colours are still two objects), so
+     * assertEquals on them always fails. Its toString lists every colour, so the text is compared.
+     */
+    private fun assertSameColours(expected: ColorScheme, actual: ColorScheme) {
+        assertEquals(expected.toString(), actual.toString())
+    }
 
     // ---- ThemeMode ----
 
@@ -86,20 +95,20 @@ class AmoledThemeTest {
     @Test
     fun theNormalDarkTheme_isNotChanged() {
         assertEquals(Color(0xFF121318), dark.background)
-        assertEquals(dark, elnorColorScheme(dark = true, amoled = false))
+        assertSameColours(dark, elnorColorScheme(dark = true, amoled = false))
     }
 
     @Test
     fun lightTheme_ignoresAmoled() {
-        assertEquals(elnorColorScheme(dark = false), elnorColorScheme(dark = false, amoled = true))
+        assertSameColours(elnorColorScheme(dark = false), elnorColorScheme(dark = false, amoled = true))
     }
 
     @Test
     fun withoutContext_theElnorAmoledColoursAreUsed() {
         // No context (like a phone that cannot do wallpaper colours): the Elnor colours
         val scheme = elnorColorScheme(dark = true, context = null, dynamic = true, amoled = true)
-        assertEquals(amoled, scheme)
-        assertEquals(
+        assertSameColours(amoled, scheme)
+        assertSameColours(
             dark,
             elnorColorScheme(dark = true, context = null, dynamic = true, amoled = false)
         )
