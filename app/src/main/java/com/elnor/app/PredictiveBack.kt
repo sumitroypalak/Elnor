@@ -34,7 +34,7 @@ import androidx.compose.runtime.snapshotFlow
  *  - [cancel]: the user let go without going back
  */
 @Stable
-internal class BackGesture {
+class BackGesture {
     var progress by mutableFloatStateOf(0f)
         private set
     var active by mutableStateOf(false)
