@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import android.print.PageRange
 import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
@@ -20,7 +21,6 @@ import android.text.style.StyleSpan
 import android.graphics.Typeface
 import android.widget.Toast
 import java.io.FileOutputStream
-import java.io.IOException
 
 /**
  * Print a note, or save it as a PDF, with Android's own print screen (which has "Save as PDF").
@@ -122,37 +122,47 @@ private class NotePrintAdapter(
             callback.onLayoutCancelled()
             return
         }
-        attributes = new
-        val size = new.mediaSize ?: PrintAttributes.MediaSize.ISO_A4
-        val widthPt = size.widthMils * 72 / 1000
-        val heightPt = size.heightMils * 72 / 1000
-        val contentWidth = (widthPt - 2 * marginPt).coerceAtLeast(100)
-        val contentHeight = (heightPt - 2 * marginPt).coerceAtLeast(100)
+        // The system calls this on the main thread, so an exception that gets out of here would
+        // crash the app. Any failure of the layout is reported to the print screen instead.
+        try {
+            attributes = new
+            val size = new.mediaSize ?: PrintAttributes.MediaSize.ISO_A4
+            val widthPt = size.widthMils * 72 / 1000
+            val heightPt = size.heightMils * 72 / 1000
+            val contentWidth = (widthPt - 2 * marginPt).coerceAtLeast(100)
+            val contentHeight = (heightPt - 2 * marginPt).coerceAtLeast(100)
 
-        val built = StaticLayout.Builder.obtain(text, 0, text.length, paint, contentWidth)
-            .setLineSpacing(0f, 1.3f) // a little more space: Bengali vowel signs need room
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-            .build()
-        layout = built
+            val built = StaticLayout.Builder.obtain(text, 0, text.length, paint, contentWidth)
+                .setLineSpacing(0f, 1.3f) // a little more space: Bengali vowel signs need room
+                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .build()
 
-        val result = ArrayList<IntRange>()
-        var first = 0
-        while (first < built.lineCount) {
-            val top = built.getLineTop(first)
-            var last = first
-            while (last + 1 < built.lineCount && built.getLineBottom(last + 1) - top <= contentHeight) last++
-            result.add(first..last)
-            first = last + 1
+            val result = ArrayList<IntRange>()
+            var first = 0
+            while (first < built.lineCount) {
+                val top = built.getLineTop(first)
+                var last = first
+                while (last + 1 < built.lineCount && built.getLineBottom(last + 1) - top <= contentHeight) last++
+                result.add(first..last)
+                first = last + 1
+            }
+            // Only kept when the whole layout worked, so onWrite never sees a half-made one
+            layout = built
+            pages = result.ifEmpty { listOf(0..0) }
+
+            callback.onLayoutFinished(
+                PrintDocumentInfo.Builder("$name.pdf")
+                    .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                    .setPageCount(pages.size)
+                    .build(),
+                old == null || old.mediaSize != new.mediaSize
+            )
+        } catch (e: Exception) {
+            Log.e("NotePrint", "Laying out the pages failed", e)
+            layout = null
+            pages = emptyList()
+            callback.onLayoutFailed(e.message)
         }
-        pages = result.ifEmpty { listOf(0..0) }
-
-        callback.onLayoutFinished(
-            PrintDocumentInfo.Builder("$name.pdf")
-                .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
-                .setPageCount(pages.size)
-                .build(),
-            old == null || old.mediaSize != new.mediaSize
-        )
     }
 
     override fun onWrite(
@@ -189,7 +199,12 @@ private class NotePrintAdapter(
             }
             FileOutputStream(destination.fileDescriptor).use { pdf.writeTo(it) }
             callback.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
-        } catch (e: IOException) {
+        } catch (e: Exception) {
+            // Not only IOException: drawing the text or writing the PDF can also throw (for example
+            // IllegalStateException or IllegalArgumentException), and the system calls this on the
+            // main thread, so an uncaught exception would crash the app. The print screen is told
+            // that printing failed instead.
+            Log.e("NotePrint", "Writing the PDF failed", e)
             callback.onWriteFailed(e.message)
         } finally {
             pdf.close()
