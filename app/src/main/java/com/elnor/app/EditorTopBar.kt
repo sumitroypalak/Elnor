@@ -20,8 +20,8 @@ import androidx.compose.ui.unit.dp
 // The top bar of the note page (split out of EditorScreen.kt, nothing changed in how it works).
 
 /**
- * Back arrow, Undo / Redo, Find, Preview, Pin and the three-dot menu (Copy, Share, Save as a file,
- * Delete).
+ * Back arrow, Undo / Redo, Find, Preview, Pin and the three-dot menu (Copy, Share, Print / Save as PDF,
+ * Save as a file, Delete).
  *
  * The bar only draws and reports clicks: the page ([EditorScreen]) owns the text and does the work
  * in [onBack], [onUndo], [onRedo], [onFind], [onTogglePreview], [onTogglePin] and [onDelete].
@@ -144,6 +144,14 @@ internal fun EditorTopBar(
                                     moreMenuOpen = false
                                     AppLock.expectExternalScreen() // the Share sheet is not "leaving" Elnor
                                     shareNote(context, title, bodyText)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Print / Save as PDF") },
+                                onClick = {
+                                    moreMenuOpen = false
+                                    AppLock.expectExternalScreen() // the print screen is not "leaving" Elnor
+                                    printNote(context, title, bodyText)
                                 }
                             )
                             for (format in NoteExportFormat.entries) {
