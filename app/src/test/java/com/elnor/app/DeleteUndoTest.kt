@@ -32,7 +32,7 @@ class DeleteUndoTest {
     }
 
     /** Remembers what was asked. [restoreNotes] is NOT overridden: the default of the interface is tested. */
-    private class FakeRepository : NoteRepository {
+    private open class FakeRepository : NoteRepository {
         val trashed = mutableListOf<Long>()
         val restored = mutableListOf<Long>()
         val pinCalls = mutableListOf<Pair<Long, Boolean>>()
@@ -239,5 +239,70 @@ class DeleteUndoTest {
         settle()
 
         assertEquals(listOf(5L), repo.trashed)
+    }
+
+    // ---- A new note whose first save has not run yet ----
+    // The real repository stores a new note under the id the editor chose when its page opened.
+
+    private class IdKeepingRepository : FakeRepository() {
+        val inserted = mutableListOf<Long>()
+
+        override suspend fun insertWithId(note: Note): Long {
+            inserted.add(note.id)
+            return note.id
+        }
+    }
+
+    private fun TestScope.newNoteEditor(repo: NoteRepository) = NoteEditorViewModel(
+        repo,
+        backgroundScope,
+        autoSaveDelayMs = delayMs,
+        timerScope = backgroundScope,
+        newNoteId = { 777L }
+    )
+
+    @Test
+    fun deleteNote_whileTheFirstSaveIsStillQueued_returnsTheReservedId_andTrashesThatNote() = runTest {
+        val repo = IdKeepingRepository()
+        val vm = newNoteEditor(repo)
+        vm.open(null)
+        vm.onBodyChange("hello")
+        vm.onStop() // the first save is in the queue, but has not run yet (the test clock did not move)
+
+        val deletedId = vm.deleteNote()
+        settle()
+
+        assertEquals("Undo must be offered for the note that goes to the Trash", 777L, deletedId)
+        assertEquals(listOf(777L), repo.inserted)
+        assertEquals(listOf(777L), repo.trashed)
+    }
+
+    @Test
+    fun deleteNote_ofANewNoteWhoseTextWasNeverQueued_returnsNull_andStoresNothing() = runTest {
+        val repo = IdKeepingRepository()
+        val vm = newNoteEditor(repo)
+        vm.open(null)
+        vm.onBodyChange("hello") // the typing pause is not over: nothing is queued
+
+        assertNull(vm.deleteNote())
+        settle()
+
+        assertTrue(repo.inserted.isEmpty())
+        assertTrue(repo.trashed.isEmpty())
+    }
+
+    @Test
+    fun deleteNote_ofANewNoteWithOnlyABlankSaveQueued_returnsNull() = runTest {
+        val repo = IdKeepingRepository()
+        val vm = newNoteEditor(repo)
+        vm.open(null)
+        vm.onBodyChange("   ")
+        vm.onStop() // a blank text is never stored
+
+        assertNull(vm.deleteNote())
+        settle()
+
+        assertTrue(repo.inserted.isEmpty())
+        assertTrue(repo.trashed.isEmpty())
     }
 }
