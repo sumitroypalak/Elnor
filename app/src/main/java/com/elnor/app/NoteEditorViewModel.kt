@@ -96,7 +96,14 @@ class NoteEditorViewModel(
          * in [savedState] from the first moment and nothing has to wait for the first save.
          * 0 for a page that edits an existing note.
          */
-        @Volatile var reservedId: Long = 0L
+        @Volatile var reservedId: Long = 0L,
+        /**
+         * True when the last save that was put in the queue has text in it. Saves run in the order
+         * they were queued, so then the note exists in storage as soon as the queue has caught up
+         * (a new note is inserted under [reservedId]), even while [id] is still null. [deleteNote]
+         * uses it to tell which id goes to the Trash. Only written on the main thread.
+         */
+        @Volatile var lastQueuedHasText: Boolean = false
     )
 
     private sealed interface Command {
@@ -260,8 +267,14 @@ class NoteEditorViewModel(
             delay(if (current.id == null) firstSaveDelayMs else autoSaveDelayMs)
             // The page may have closed or a new one opened while we waited
             if (session !== current) return@launch
-            commands.trySend(Command.Save(current, draftTitle, draftBody, fromPause = true))
+            enqueueSave(current, draftTitle, draftBody, fromPause = true)
         }
+    }
+
+    /** Puts a save in the queue and remembers if it has text (see [Session.lastQueuedHasText]). */
+    private fun enqueueSave(session: Session, title: String, body: String, fromPause: Boolean = false) {
+        session.lastQueuedHasText = title.isNotBlank() || body.isNotBlank()
+        commands.trySend(Command.Save(session, title, body, fromPause))
     }
 
     private fun cancelAutoSave() {
@@ -317,7 +330,7 @@ class NoteEditorViewModel(
     fun retrySave() {
         val current = session ?: return
         cancelAutoSave()
-        commands.trySend(Command.Save(current, draftTitle, draftBody, fromPause = true))
+        enqueueSave(current, draftTitle, draftBody, fromPause = true)
     }
 
     /**
@@ -346,7 +359,7 @@ class NoteEditorViewModel(
         _lastSavedAt.value = null // the page is closing: the next page must not start with this time
         savedState.remove<Long>(KEY_DRAFT_NOTE_ID) // the page is closed: nothing to continue later
         clearHistory()
-        commands.trySend(Command.Save(current, draftTitle, draftBody))
+        enqueueSave(current, draftTitle, draftBody)
     }
 
     /**
@@ -362,7 +375,7 @@ class NoteEditorViewModel(
     fun onStop() {
         val current = session ?: return
         cancelAutoSave() // saved right now, no need to wait for the pause
-        commands.trySend(Command.Save(current, draftTitle, draftBody))
+        enqueueSave(current, draftTitle, draftBody)
         // Written here, on this thread, so it is surely there when the state is saved
         if (current.startedNew && current.reservedId != 0L) {
             savedState[KEY_DRAFT_NOTE_ID] = current.reservedId
@@ -373,10 +386,20 @@ class NoteEditorViewModel(
      * The user chose "Delete note". Moves the note to the Trash if it was saved, and ends the session.
      * Returns the id of the note that goes to the Trash, so the screen can offer "Undo", or null
      * when there was nothing to delete (no page open, or the note was never saved).
+     *
+     * A new note whose first save is still in the queue (or running) has no [Session.id] yet, but it
+     * will be inserted under its reserved id before the delete in the queue runs, and then goes to
+     * the Trash. That reserved id is returned, so "Undo" is offered for it too. A new note whose
+     * text was never put in the queue is not stored at all: null.
      */
     fun deleteNote(): Long? {
         val current = session ?: return null
         val deletedId = current.id
+            ?: if (current.startedNew && current.reservedId != 0L && current.lastQueuedHasText) {
+                current.reservedId
+            } else {
+                null
+            }
         session = null
         _saveFailed.value = false
         cancelAutoSave() // a waiting pause-save must not bring the note back
