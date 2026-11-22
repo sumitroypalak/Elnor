@@ -16,8 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ----------------------------- Notes screen --------------------------------
 //
@@ -160,20 +163,33 @@ fun ElnorApp(
     // The tag buttons under the search field (see Tags.kt). A tapped tag shows only the notes that
     // have it. It is kept as the key of the tag, and it works together with the search text.
     var selectedTag by rememberSaveable { mutableStateOf<String?>(null) }
-    // Counted from the notes of the home list (not the Archive, not the Trash)
-    val tagCounts = remember(notes) { Tags.summarize(notes) }
+    // Counted from the notes of the home list (not the Archive, not the Trash). Finding the tags
+    // reads the whole text of every note, so it is done in the background, not while the screen is
+    // drawn (typing in a long list of notes must never stutter). [tagCache] remembers the tags of
+    // each note, so after an auto-save only the note that changed is read again. While a new count is
+    // being made the buttons keep showing the last one. null = nothing was counted yet.
+    val tagCache = remember { TagKeyCache() }
+    val tagCountsOrNull by produceState<List<TagCount>?>(initialValue = null, notes) {
+        value = withContext(Dispatchers.Default) {
+            tagCache.summarize(notes, isActive = { isActive })
+        }
+    }
+    val tagCounts = tagCountsOrNull ?: emptyList()
     // A tag that no note has any more (the last note with it was changed, archived or deleted) is
-    // not selected any more. Only checked when the notes are really loaded, so a tag that is
-    // restored after rotation is not lost.
-    LaunchedEffect(tagCounts, notesLoaded) {
+    // not selected any more. Only checked when the notes are really loaded and the tags were
+    // counted, so a tag that is restored after rotation is not lost.
+    LaunchedEffect(tagCountsOrNull, notesLoaded) {
+        val counts = tagCountsOrNull ?: return@LaunchedEffect
         val tag = selectedTag
-        if (notesLoaded && tag != null && tagCounts.none { it.key == tag }) selectedTag = null
+        if (notesLoaded && tag != null && counts.none { it.key == tag }) selectedTag = null
     }
 
+    // The cache answers at once for notes it has already read, so choosing a tag does not read the
+    // texts again
     val shownNotes = remember(visibleNotes, sort, selectedTag) {
         val sorted = sortNotes(visibleNotes, sort)
         val tag = selectedTag
-        if (tag == null) sorted else sorted.filter { Tags.has(it, tag) }
+        if (tag == null) sorted else sorted.filter { tagCache.has(it, tag) }
     }
 
     // ---- Selecting notes (touch and hold a note) ----

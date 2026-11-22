@@ -159,4 +159,57 @@ class TagsTest {
         assertTrue(Tags.summarize(emptyList()).isEmpty())
         assertTrue(Tags.summarize(listOf(note(1, "x", "# heading only"))).isEmpty())
     }
+
+    // ---- the cache of the tags of the notes (TagKeyCache) ----
+
+    @Test
+    fun the_cache_gives_the_same_answers_as_the_plain_functions() {
+        val notes = listOf(
+            note(1, "#work meeting", "buy #milk"),
+            note(2, "", "#milk #কাজ"),
+            note(3, "plain", "no tags here")
+        )
+        val cache = TagKeyCache()
+        for (n in notes) assertEquals(Tags.keysOf(n), cache.keysOf(n))
+        assertEquals(Tags.summarize(notes), cache.summarize(notes))
+        assertTrue(cache.has(notes[0], "work"))
+        assertFalse(cache.has(notes[0], "কাজ"))
+    }
+
+    @Test
+    fun the_cache_never_gives_the_tags_of_an_older_text() {
+        val cache = TagKeyCache()
+        assertEquals(setOf("old"), cache.keysOf(note(1, "", "#old")))
+        // same id, new text: the answer must follow the text
+        assertEquals(setOf("new"), cache.keysOf(note(1, "", "#new")))
+        assertEquals(setOf("new", "title"), cache.keysOf(note(1, "#title", "#new")))
+        assertEquals(emptySet<String>(), cache.keysOf(note(1, "", "no tag any more")))
+    }
+
+    @Test
+    fun the_cache_summary_follows_changes_between_calls() {
+        val cache = TagKeyCache()
+        assertEquals(
+            listOf(TagCount("a", 2), TagCount("b", 1)),
+            cache.summarize(listOf(note(1, "", "#a #b"), note(2, "", "#a")))
+        )
+        // note 1 lost its tags, note 2 was deleted, note 3 is new
+        assertEquals(
+            listOf(TagCount("c", 1)),
+            cache.summarize(listOf(note(1, "", "plain"), note(3, "", "#c")))
+        )
+        assertTrue(cache.summarize(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun a_summary_that_is_not_needed_any_more_stops_early_and_is_empty() {
+        val cache = TagKeyCache()
+        val notes = listOf(note(1, "", "#a"), note(2, "", "#a"), note(3, "", "#a"))
+        var asked = 0
+        val result = cache.summarize(notes) { ++asked < 2 } // stops at the second note
+        assertTrue(result.isEmpty())
+        assertEquals(2, asked)
+        // and the next full summary is still right
+        assertEquals(listOf(TagCount("a", 3)), cache.summarize(notes))
+    }
 }

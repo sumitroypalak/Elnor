@@ -78,7 +78,57 @@ object Tags {
         for (note in notes) {
             for (key in keysOf(note)) counts[key] = (counts[key] ?: 0) + 1
         }
-        return counts.map { TagCount(it.key, it.value) }
+        return sortedCounts(counts)
+    }
+
+    /** The tag that is in the most notes comes first; the same count is ordered by the key. */
+    internal fun sortedCounts(counts: Map<String, Int>): List<TagCount> =
+        counts.map { TagCount(it.key, it.value) }
             .sortedWith(compareByDescending<TagCount> { it.count }.thenBy { it.key })
+}
+
+/**
+ * Remembers the tags of every note it has seen, so the (slow) search for tags in the text is only
+ * done again for a note whose title or text really changed. Finding tags runs a regular expression
+ * and the link detection over the whole text, which is too much to repeat for every note after
+ * every auto-save, and it must never run on the main thread for a long list of notes.
+ *
+ * A remembered answer is only used while the title and the text are the same as when it was
+ * calculated, so the cache can never give the tags of an older text. It is safe to use from more
+ * than one thread at once (the screen asks from the main thread, the summary is made in the
+ * background). It has no Android code, so it is tested with plain unit tests.
+ */
+class TagKeyCache {
+
+    private class Entry(val title: String, val body: String, val keys: Set<String>)
+
+    private val entries = java.util.concurrent.ConcurrentHashMap<Long, Entry>()
+
+    /** Same answer as [Tags.keysOf], but a note whose text did not change is not searched again. */
+    fun keysOf(note: Note): Set<String> {
+        val cached = entries[note.id]
+        if (cached != null && cached.title == note.title && cached.body == note.body) return cached.keys
+        val keys = Tags.keysOf(note)
+        entries[note.id] = Entry(note.title, note.body, keys)
+        return keys
+    }
+
+    /** Same answer as [Tags.has]. */
+    fun has(note: Note, key: String): Boolean = key in keysOf(note)
+
+    /**
+     * Same answer as [Tags.summarize]. [isActive] is asked before every note: when it turns false
+     * (the work is not needed any more) the loop stops at once and the result must be thrown away.
+     * When all notes were read, notes that no longer exist are forgotten, so the cache does not
+     * keep the text of deleted notes.
+     */
+    fun summarize(notes: List<Note>, isActive: () -> Boolean = { true }): List<TagCount> {
+        val counts = HashMap<String, Int>()
+        for (note in notes) {
+            if (!isActive()) return emptyList()
+            for (key in keysOf(note)) counts[key] = (counts[key] ?: 0) + 1
+        }
+        entries.keys.retainAll(notes.mapTo(HashSet()) { it.id })
+        return Tags.sortedCounts(counts)
     }
 }
