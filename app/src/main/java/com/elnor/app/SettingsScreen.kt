@@ -2,6 +2,7 @@
 
 package com.elnor.app
 
+import android.os.Build
 import android.view.View
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
@@ -21,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -232,6 +234,42 @@ fun SettingsScreen(
                     },
                     onDismiss = { showThemeDialog = false }
                 )
+            }
+
+            // ---- Quick note ----
+            // Android 13 and newer can add the "New note" tile of the Quick Settings panel from
+            // here (the system asks to confirm). Older phones add it by hand, see the README.
+            if (canRequestTile(Build.VERSION.SDK_INT)) {
+                val tileContext = LocalContext.current
+                SectionLabel("Quick note")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(role = Role.Button) { requestAddNewNoteTile(tileContext) }
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
+                    ) {
+                        Text(
+                            "Quick Settings tile",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Add a \"New note\" button to the notification panel",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        )
+                    }
+                }
             }
 
             // ---- Trash ----
